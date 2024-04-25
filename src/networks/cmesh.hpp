@@ -40,20 +40,21 @@
 ////////////////////////////////////////////////////////////////////////
 #ifndef _CMESH_HPP_
 #define _CMESH_HPP_
-
+//包含了网络和函数的声明
 #include "network.hpp"
 #include "routefunc.hpp"
-
+//定义了一个CMesh的网络拓扑，它继承自Network类
 class CMesh : public Network {
 public:
+  //使用配置信息和网络名称来初始化CMesh实例
   CMesh( const Configuration &config, const string & name );
-  int GetN() const;
-  int GetK() const;
+  int GetN() const;//用于返回网络的维度
+  int GetK() const;//用于返回每个维度上路由器的数量
 
-  static int NodeToRouter( int address ) ;
-  static int NodeToPort( int address ) ;
+  static int NodeToRouter( int address ) ;//将节点地址转换为路由器id
+  static int NodeToPort( int address ) ;//将节点地址转换为端口号
 
-  static void RegisterRoutingFunctions() ;
+  static void RegisterRoutingFunctions() ;//注册路由函数
 
 private:
 
@@ -64,8 +65,8 @@ private:
   static int _memo_NodeShiftY ;
   static int _memo_PortShiftY ;
 
-  void _ComputeSize( const Configuration &config );
-  void _BuildNet( const Configuration& config );
+  void _ComputeSize( const Configuration &config );//根据配置信息计算网络的大小
+  void _BuildNet( const Configuration& config );//构建网络，包括初始化路由器和通道
 
   int _k ;
   int _n ;
@@ -80,12 +81,13 @@ private:
 //
 // Routing Functions
 //
+//路由函数
 void xy_yx_cmesh( const Router *r, const Flit *f, int in_channel, 
 		  OutputSet *outputs, bool inject ) ;
 
 void xy_yx_no_express_cmesh( const Router *r, const Flit *f, int in_channel, 
 			     OutputSet *outputs, bool inject ) ;
-
+//实现了基于XY-YX路由策略的路由函数，前者考虑了快速通道，后者没有
 void dor_cmesh( const Router *r, const Flit *f, int in_channel, 
 		OutputSet *outputs, bool inject ) ;
 
