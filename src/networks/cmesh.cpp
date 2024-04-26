@@ -60,54 +60,61 @@ CMesh::CMesh( const Configuration& config, const string & name )
   _Alloc();
   _BuildNet(config);
 }
-
+//在一个全局路由函数映射表gRoutingFunctionMap中注册多个路由函数。
+//将字符串标识符映射到实际的路由函数指针，一遍再模拟过程中根据标识符
+//调用相应的路由逻辑
 void CMesh::RegisterRoutingFunctions() {
+  //通过字符串键映射到不同的路由函数，&运算符用于获取函数的地址，这些函数被注册到
+  //gRoutingFunctionMap中，对应于上面的字符串键
   gRoutingFunctionMap["dor_cmesh"] = &dor_cmesh;
   gRoutingFunctionMap["dor_no_express_cmesh"] = &dor_no_express_cmesh;
   gRoutingFunctionMap["xy_yx_cmesh"] = &xy_yx_cmesh;
   gRoutingFunctionMap["xy_yx_no_express_cmesh"]  = &xy_yx_no_express_cmesh;
 }
-
+//根据Configuration对象提供的参数计算网络的大小和结构。
 void CMesh::_ComputeSize( const Configuration &config ) {
-
-  int k = config.GetInt( "k" );
-  int n = config.GetInt( "n" );
+  //从配置文件中读取
+  int k = config.GetInt( "k" );//获取维度的宽度
+  int n = config.GetInt( "n" );//获取网格的维度数
+  //断言不能大于2，因为当前的实现仅支持最多两维的网格拓扑
   assert(n <= 2); // broken for n > 2
-  int c = config.GetInt( "c" );
-  assert(c == 4); // broken for c != 4
-
+  int c = config.GetInt( "c" );//获取每个路由器的集中度，即终端节点数
+  assert(c == 4); // broken for c != 4//当前实现只支持集中度为4的网格
   ostringstream router_name;
   //how many routers in the x or y direction
+  //分别获取网络在X和y方向上的路由器数量，//x和y方向上的路由器数量必须相同，因为当前实现不支持非对称拓扑
   _xcount = config.GetInt("x");
   _ycount = config.GetInt("y");
   assert(_xcount == _ycount); // broken for asymmetric topologies
   //configuration of hohw many clients in X and Y per router
+  //每个路由器上x和y维上的主机数量
   _xrouter = config.GetInt("xr");
   _yrouter = config.GetInt("yr");
   assert(_xrouter == _yrouter); // broken for asymmetric concentration
-
-  gK = _k = k ;
-  gN = _n = n ;
-  gC = _c = c ;
+  //给全局常量赋值
+  gK = _k = k ;//每个维度的路由器数量，假设为3
+  gN = _n = n ;//维度的值，假设为2
+  gC = _c = c ;//每个路由器的终端数量.假设为2
 
   assert(c == _xrouter*_yrouter);
-  
-  _nodes    = _c * powi( _k, _n); // Number of nodes in network
-  _size     = powi( _k, _n);      // Number of routers in network
-  _channels = 2 * _n * _size;     // Number of channels in network
+  //计算网络中的节点总数=c*_k的_n次方
+  _nodes    = _c * powi( _k, _n); // Number of nodes in network、18
+  _size     = powi( _k, _n);      // Number of routers in network、9
+  _channels = 2 * _n * _size;     // Number of channels in network、36
 
-  _cX = _c / _n ;   // Concentration in X Dimension 
-  _cY = _c / _cX ;  // Concentration in Y Dimension
+  _cX = _c / _n ;   // Concentration in X Dimension 2/2=1
+  _cY = _c / _cX ;  // Concentration in Y Dimension 2/1=2
 
   //
-  _memo_NodeShiftX = _cX >> 1 ;
+  _memo_NodeShiftX = _cX >> 1 ;//计算节点右移一位的值、2
+  //log_two表示以2为底的对数
   _memo_NodeShiftY = log_two(gK * _cX) + ( _cY >> 1 ) ;
   _memo_PortShiftY = log_two(gK * _cX)  ;
 
 }
 
 void CMesh::_BuildNet( const Configuration& config ) {
-
+  //计算路由器在网格中的位置
   int x_index ;
   int y_index ;
 
@@ -117,26 +124,34 @@ void CMesh::_BuildNet( const Configuration& config ) {
   }
 
   //latency type, noc or conventional network
+  //声明一个变量来决定是否使用NoC的延迟模型，这个值基于配置对象中的一个整数值决定
   bool use_noc_latency;
   use_noc_latency = (config.GetInt("use_noc_latency")==1);
   
+  //用于构建路由器的名称
   ostringstream name;
   // The following vector is used to check that every
   //  processor in the system is connected to the network
+  //初始化一个布尔向量，其大小由_nodes决定，所有元素初始为false，这个
+  //向量用于跟踪系统中的每个处理器是否都连接到了网络
   vector<bool> channel_vector(_nodes, false) ;
   
   //
   // Routers and Channel
-  //
+  //开始一个循环，用于遍历网络中的所有节点
   for (int node = 0; node < _size; ++node) {
 
     // Router index derived from mesh index
+    //计算该节点在mesh中的坐标
     y_index = node / _k ;
     x_index = node % _k ;
 
+    //计算每个路由器的输入和输出端口的数量，每多一维就增加两个方向的端口
     const int degree_in  = 2 *_n + _c ;
     const int degree_out = 2 *_n + _c ;
 
+    //构建当前节点的路由器名称，创建一个新的路由器对象，并将其
+    //添加到_timed_modules容器中，然后清空name字符串以备下一个路由器使用
     name << "router_" << y_index << '_' << x_index;
     _routers[node] = Router::NewRouter( config, 
 					this, 
@@ -147,7 +162,7 @@ void CMesh::_BuildNet( const Configuration& config ) {
     _timed_modules.push_back(_routers[node]);
     name.str("");
 
-    //
+    //端口标号
     // Port Numbering: as best as I can determine, the order in
     //  which the input and output channels are added to the
     //  router determines the associated port number that must be
@@ -157,40 +172,50 @@ void CMesh::_BuildNet( const Configuration& config ) {
 
     //
     // Processing node channels
-    //
-    for (int y = 0; y < _cY ; y++) {
-      for (int x = 0; x < _cX ; x++) {
+    //构建每个路由器到本地处理节点的通道，通过两层嵌套for循环遍历所有的处理节点
+    //然后为每个处理节点创建输入和输出通道，并将它们添加到当前正在构建的路由器中
+    for (int y = 0; y < _cY ; y++) {//y = 0、1
+      for (int x = 0; x < _cX ; x++) {//x = 0
+	//假设(x,y)=(1,1),link=(3*1)*(2*1+0)+(1*1+0)=7
+	//_cx=1,_cy=2,k=3 link=(3*1)*(2*1+1)+(1*1+0)=9
 	int link = (_k * _cX) * (_cY * y_index + y) + (_cX * x_index + x) ;
 	assert( link >= 0 ) ;
 	assert( link < _nodes ) ;
 	assert( channel_vector[ link ] == false ) ;
 	channel_vector[link] = true ;
 	// Ingress Ports
+	//为当前路由器添加一个输入通道，_inject[link]是输入通道对象
+	//_inject_cred[link]是与该输入通道关联的信用信息，用于流量控制
 	_routers[node]->AddInputChannel(_inject[link], _inject_cred[link]);
 	// Egress Ports
+	//添加一个输出通道，_eject[link]是输出通道对象...
 	_routers[node]->AddOutputChannel(_eject[link], _eject_cred[link]);
 	//injeciton ejection latency is 1
+	//设置输入和输出通道的延迟为1，在网路模拟中，延迟表示数据包或信号
+	//通过该通道所需要的时间
 	_inject[link]->SetLatency( 1 );
 	_eject[link]->SetLatency( 1 );
       }
     }
 
     //
-    // router to router channels
+    // router to router channels，路由器之间的通道建立
     //
-    const int x = node % _k ;
-    const int y = node / _k ;
-    const int offset = powi( _k, _n ) ;
+    //计算当前路由器在mesh中的位置[1,1]
+    const int x = node % _k ;//1
+    const int y = node / _k ;//1
+    const int offset = powi( _k, _n ) ;//9
 
-    //the channel number of the input output channels.
-    int px_out = _k * y + x + 0 * offset ;
-    int nx_out = _k * y + x + 1 * offset ;
-    int py_out = _k * y + x + 2 * offset ;
-    int ny_out = _k * y + x + 3 * offset ;
-    int px_in  = _k * y + ((x+1)) + 1 * offset ;
-    int nx_in  = _k * y + ((x-1)) + 0 * offset ;
-    int py_in  = _k * ((y+1)) + x + 3 * offset ;
-    int ny_in  = _k * ((y-1)) + x + 2 * offset ;
+    //the channel number of the input output channels.通道的标号
+    //px:positive x | nx:negtive x
+    int px_out = _k * y + x + 0 * offset ;//4
+    int nx_out = _k * y + x + 1 * offset ;//13
+    int py_out = _k * y + x + 2 * offset ;//22
+    int ny_out = _k * y + x + 3 * offset ;//31
+    int px_in  = _k * y + ((x+1)) + 1 * offset ;//14，x+1意味着来自东边邻居路由器
+    int nx_in  = _k * y + ((x-1)) + 0 * offset ;//3
+    int py_in  = _k * ((y+1)) + x + 3 * offset ;//34，y+1意味来自南边的邻居路由器
+    int ny_in  = _k * ((y-1)) + x + 2 * offset ;//19
 
     // Express Channels
     if (x == 0){
@@ -230,9 +255,9 @@ void CMesh::_BuildNet( const Configuration& config ) {
     }
 
     /*set latency and add the channels*/
-
+    //设置网络中路由器的输出和输入通道延迟，并添加这些通道到路由器中
     // Port 0: +x channel
-    if(use_noc_latency) {
+    if(use_noc_latency) {//这个if用于检查是否使用NoC的延迟模型，如果是将根据网络拓扑计算通道的延迟
       int const px_latency = (x == _k-1) ? (_cY*_k/2) : _cX;
       _chan[px_out]->SetLatency( px_latency );
       _chan_cred[px_out]->SetLatency( px_latency );
