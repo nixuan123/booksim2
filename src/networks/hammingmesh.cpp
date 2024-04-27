@@ -96,7 +96,7 @@ for (node = 0; node < _a; ++node) {
 }
 }
 
-int hammingmesh_port(int rID, int src, int dest) const// find the right port
+int hammingmesh_port(int rID, int src, int dest) // find the right port
 {
     int dst_router;
     int out_port;
@@ -121,7 +121,7 @@ int hammingmesh_port(int rID, int src, int dest) const// find the right port
     return out_port;
 }
 
-void min_hammingmesh( const Router *r, const Flit *f, int in_channel, OutputSet *outputs, bool inject ) const
+void min_hammingmesh( const Router *r, const Flit *f, int in_channel, OutputSet *outputs, bool inject ) 
 {
   int debug = f->watch;
   outputs->Clear();
