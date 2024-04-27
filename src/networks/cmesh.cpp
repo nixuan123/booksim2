@@ -337,11 +337,11 @@ void CMesh::_BuildNet( const Configuration& config ) {
 //  Routing Helper Functions
 //
 // ----------------------------------------------------------------------
-
+//根据给定的节点地址计算出该节点所连接的路由器的索引
 int CMesh::NodeToRouter( int address ) {
 
-  int y  = (address /  (_cX*gK))/_cY ;
-  int x  = (address %  (_cX*gK))/_cY ;
+  int y  = (address /  (_cX*gK))/_cY ;//  address/(_c*gk)
+  int x  = (address %  (_cX*gK))/_cY ;//  
   int router = y*gK + x ;
   
   return router ;
@@ -360,7 +360,7 @@ int CMesh::NodeToPort( int address ) {
 
 // ----------------------------------------------------------------------
 //
-//  Routing Functions
+//  Routing Functions//路由函数
 //
 // ----------------------------------------------------------------------
 
