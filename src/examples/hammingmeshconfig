@@ -1,18 +1,18 @@
-```
-// Topology
-topology = testnet;
+topology = hammingmesh;
 
-//a = 4;
-//p = 3;
+k = 4;
+n = 2;
+c = 4;
+xr = 2;
+yr = 2;
 
-//Routing
-routing_function = min;
+x = 4; 
+y = 4;
 
-// Flow control
-num_vcs = 2;
+routing_function = dor_no_express;
 
-// Traffic
-traffic = uniform;
-injection_rate = 0.25;
-```
+traffic = bitcomp;
 
+use_read_write = 0;
+
+batch_size = 2000;
