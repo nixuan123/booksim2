@@ -38,16 +38,16 @@
 //  $Id$
 // 
 ////////////////////////////////////////////////////////////////////////
-#ifndef _CMESH_HPP_
-#define _CMESH_HPP_
+#ifndef _HammingMESH_HPP_
+#define _HammingMESH_HPP_
 //包含了网络和函数的声明
 #include "network.hpp"
 #include "routefunc.hpp"
 //定义了一个CMesh的网络拓扑，它继承自Network类
-class CMesh : public Network {
+class HammingMesh : public Network {
 public:
   //使用配置信息和网络名称来初始化CMesh实例
-  CMesh( const Configuration &config, const string & name );
+  HamingMesh( const Configuration &config, const string & name );
   int GetN() const;//用于返回网络的维度
   int GetK() const;//用于返回每个维度上路由器的数量
 
