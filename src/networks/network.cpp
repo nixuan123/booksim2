@@ -47,6 +47,7 @@
 #include "fattree.hpp"
 #include "anynet.hpp"
 #include "dragonfly.hpp"
+#include "hammingmesh.hpp"//【新增】
 
 
 Network::Network( const Configuration &config, const string & name ) :
