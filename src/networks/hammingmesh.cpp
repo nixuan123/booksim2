@@ -95,10 +95,8 @@ for (node = 0; node < _a; ++node) {
     }
 }
 }
-void HammingMesh::RegisterRoutingFunctions() {
-    gRoutingFunctionMap["min_hammingmesh"] = &min_hammingmesh;
-}
-int hammingmesh_port(int rID, int src, int dest)// find the right port
+
+int hammingmesh_port(int rID, int src, int dest) const// find the right port
 {
     int dst_router;
     int out_port;
@@ -123,7 +121,7 @@ int hammingmesh_port(int rID, int src, int dest)// find the right port
     return out_port;
 }
 
-void min_hammingmesh( const Router *r, const Flit *f, int in_channel, OutputSet *outputs, bool inject )
+void min_hammingmesh( const Router *r, const Flit *f, int in_channel, OutputSet *outputs, bool inject ) const
 {
   int debug = f->watch;
   outputs->Clear();
