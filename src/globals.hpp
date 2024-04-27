@@ -43,7 +43,8 @@ extern bool gPrintActivity;
 extern int gK;
 extern int gN;
 extern int gC;
-
+extern int gA_hammingmesh;//【新增】
+extern int gP_hammingmesh;//【新增】
 extern int gNodes;
 
 extern bool gTrace;
