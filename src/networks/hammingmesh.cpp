@@ -45,15 +45,15 @@
 #include <cassert>
 #include "random_utils.hpp"
 #include "misc_utils.hpp"
-#include "cmesh.hpp"
+#include "hammingmesh.hpp"
+//全局变量的设置
+int HammingMesh::_cX = 0 ;
+int HammingMesh::_cY = 0 ;
+int HammingMesh::_memo_NodeShiftX = 0 ;
+int HammingMesh::_memo_NodeShiftY = 0 ;
+int HammingMesh::_memo_PortShiftY = 0 ;
 
-int CMesh::_cX = 0 ;
-int CMesh::_cY = 0 ;
-int CMesh::_memo_NodeShiftX = 0 ;
-int CMesh::_memo_NodeShiftY = 0 ;
-int CMesh::_memo_PortShiftY = 0 ;
-
-CMesh::CMesh( const Configuration& config, const string & name ) 
+HammingMesh::HammingMesh( const Configuration& config, const string & name ) 
   : Network(config, name) 
 {
   _ComputeSize( config );
@@ -63,60 +63,41 @@ CMesh::CMesh( const Configuration& config, const string & name )
 //在一个全局路由函数映射表gRoutingFunctionMap中注册多个路由函数。
 //将字符串标识符映射到实际的路由函数指针，一遍再模拟过程中根据标识符
 //调用相应的路由逻辑
-void CMesh::RegisterRoutingFunctions() {
+void HammingMesh::RegisterRoutingFunctions() {
   //通过字符串键映射到不同的路由函数，&运算符用于获取函数的地址，这些函数被注册到
   //gRoutingFunctionMap中，对应于上面的字符串键
-  gRoutingFunctionMap["dor_cmesh"] = &dor_cmesh;
-  gRoutingFunctionMap["dor_no_express_cmesh"] = &dor_no_express_cmesh;
-  gRoutingFunctionMap["xy_yx_cmesh"] = &xy_yx_cmesh;
-  gRoutingFunctionMap["xy_yx_no_express_cmesh"]  = &xy_yx_no_express_cmesh;
+  gRoutingFunctionMap["dor_hamingmesh"] = &dor_cmesh;
+  gRoutingFunctionMap["dor_no_express_hammingmesh"] = &dor_no_express_cmesh;
+  gRoutingFunctionMap["xy_yx_hammingmesh"] = &xy_yx_cmesh;
+  gRoutingFunctionMap["xy_yx_no_express_hammingmesh"]  = &xy_yx_no_express_cmesh;
 }
 //根据Configuration对象提供的参数计算网络的大小和结构。
-void CMesh::_ComputeSize( const Configuration &config ) {
+void HammingMesh::_ComputeSize( const Configuration &config ) {
   //从配置文件中读取
-  int k = config.GetInt( "k" );//获取维度的宽度
-  int n = config.GetInt( "n" );//获取网格的维度数
-  //断言不能大于2，因为当前的实现仅支持最多两维的网格拓扑
-  assert(n <= 2); // broken for n > 2
-  int c = config.GetInt( "c" );//获取每个路由器的集中度，即终端节点数
-  assert(c == 4); // broken for c != 4//当前实现只支持集中度为4的网格
+  int a = config.GetInt( "a" );//板子内部0维的路由器数量
+  int b = config.GetInt( "b" );//板子内部1维的路由器数量
+  int x = config.GetInt( "x" );//板子外0维的板子数量
+  int y = config.GetInt( "y" );//板子外1维的板子数量
+  int node = config.GetInt("node");//每个路由器上的终端数量
   ostringstream router_name;
-  //how many routers in the x or y direction
-  //分别获取网络在X和y方向上的路由器数量，//x和y方向上的路由器数量必须相同，因为当前实现不支持非对称拓扑
-  _xcount = config.GetInt("x");
-  _ycount = config.GetInt("y");
-  assert(_xcount == _ycount); // broken for asymmetric topologies
-  //configuration of hohw many clients in X and Y per router
-  //每个路由器上x和y维上的主机数量
-  _xrouter = config.GetInt("xr");
-  _yrouter = config.GetInt("yr");
-  assert(_xrouter == _yrouter); // broken for asymmetric concentration
+  
+
   //给全局常量赋值
-  gK = _k = k ;//每个维度的路由器数量，假设为3
-  gN = _n = n ;//维度的值，假设为2
-  gC = _c = c ;//每个路由器的终端数量.假设为2
+  gK = _k = a ;//每个维度的路由器数量，假设为3
+  gN = _n =  ;//维度的值，假设为2
+  gC = _c = node ;//每个路由器的终端数量.假设为2
 
-  assert(c == _xrouter*_yrouter);
-  //计算网络中的节点总数=c*_k的_n次方
-  _nodes    = _c * powi( _k, _n); // Number of nodes in network、18
-  _size     = powi( _k, _n);      // Number of routers in network、9
-  _channels = 2 * _n * _size;     // Number of channels in network、36
+  _num_nodes    = _c * _num_routers; // 计算网络中的节点总数=c*路由器总数
+  _num_routers = a*b*x*y;    // 整个网络的路由器数量
+  _num_switches = x+y;  // 整个网络交换机的数量
+  
 
-  _cX = _c / _n ;   // Concentration in X Dimension 2/2=1
-  _cY = _c / _cX ;  // Concentration in Y Dimension 2/1=2
-
-  //
-  _memo_NodeShiftX = _cX >> 1 ;//计算节点右移一位的值、2
-  //log_two表示以2为底的对数
-  _memo_NodeShiftY = log_two(gK * _cX) + ( _cY >> 1 ) ;
-  _memo_PortShiftY = log_two(gK * _cX)  ;
 
 }
 
 void CMesh::_BuildNet( const Configuration& config ) {
-  //计算路由器在网格中的位置
-  int x_index ;
-  int y_index ;
+  //计算当前路由器在hammingmesh中的位置
+  int *location;
 
   //standard trace configuration 
   if(gTrace){
@@ -128,21 +109,20 @@ void CMesh::_BuildNet( const Configuration& config ) {
   bool use_noc_latency;
   use_noc_latency = (config.GetInt("use_noc_latency")==1);
   
-  //用于构建路由器的名称
+  
   ostringstream name;
   // The following vector is used to check that every
   //  processor in the system is connected to the network
-  //初始化一个布尔向量，其大小由_nodes决定，所有元素初始为false，这个
-  //向量用于跟踪系统中的每个处理器是否都连接到了网络
-  vector<bool> channel_vector(_nodes, false) ;
+  //初始化一个布尔向量，其大小由_nodes决定，所有元素初始为false
+  vector<bool> channel_vector(_num_nodes, false) ;
   
   //
   // Routers and Channel
   //开始一个循环，用于遍历网络中的所有节点
-  for (int node = 0; node < _size; ++node) {
+  for (int node = 0; node < _num_routers; ++node) {
 
     // Router index derived from mesh index
-    //计算该节点在mesh中的坐标
+    //计算该节点在hammingmesh中的坐标
     y_index = node / _k ;
     x_index = node % _k ;
 
@@ -337,17 +317,63 @@ void CMesh::_BuildNet( const Configuration& config ) {
 //  Routing Helper Functions
 //
 // ----------------------------------------------------------------------
-//根据给定的节点地址计算出该节点所连接的路由器的索引
-int CMesh::NodeToRouter( int address ) {
+int HammingMesh::IdToLocation(int router_id, int *location) {
+    int hm_id = 0;
+    int inner_id = 0;
+    int num = 0;
+    
+    int i;
+    // 初始化location数组
+    for (i = 0; i < 4; i++) {
+        location[i] = 0;
+    }
+    //switch_fid【新增】是新定义的全局变量，用于存储hm拓扑的起始交换机id
+    if (0 < run_id && run_id < switch_fid) {
+        // 设置前两位
+        inner_id = run_id % (dim_size[0] * dim_size[1]);
+        location[0] = inner_id % dim_size[1];
+        location[1] = inner_id / dim_size[1];
 
-  int y  = (address /  (_cX*gK))/_cY ;//  address/(_c*gk)
-  int x  = (address %  (_cX*gK))/_cY ;//  
-  int router = y*gK + x ;
+        // 设置后两位
+        hm_id = run_id / (dim_size[0] * dim_size[1]);
+        location[2] = hm_id % dim_size[3];
+        location[3] = hm_id / dim_size[3];
+    } else if (switch_fid <= run_id && run_id < switch_fid + dim_size[2]) {
+        // 设置前两位
+        location[0] = run_id;
+        location[1] = run_id;
+
+        // 设置后两位
+        num = run_id - switch_fid;
+        location[2] = run_id;
+        location[3] = num;
+    } else if (switch_fid + dim_size[2] <= run_id && run_id < switch_fid + dim_size[2] + dim_size[3]) {
+        // 设置前两位为 run_id
+        location[0] = run_id;
+        location[1] = run_id;
+
+        // 设置后两位
+        num = run_id - (switch_fid + _dim_size[2]);
+        location[2] = num;
+        location[3] = run_id;
+    } else {
+        // 如果 rtr_id 不在预期的范围内，设置每个位置为 run_id
+        for (i = 0; i < 4; i++) {
+            location[i] = run_id;
+        }
+    }
+	
+}
+//根据给定的节点地址计算出该节点所连接的路由器的索引
+int HammingMesh::NodeToRouter( int address ) {
+
+    
+  int router = address/_c ;//终端地址除以每个路由器上的终端数
   
   return router ;
 }
 
-int CMesh::NodeToPort( int address ) {
+int HammingMesh::NodeToPort( int address ) {
   
   const int maskX  = _cX - 1 ;
   const int maskY  = _cY - 1 ;
