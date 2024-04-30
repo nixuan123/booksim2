@@ -64,8 +64,7 @@ HammingMesh::HammingMesh( const Configuration& config, const string & name )
 //将字符串标识符映射到实际的路由函数指针，一遍再模拟过程中根据标识符
 //调用相应的路由逻辑
 void HammingMesh::RegisterRoutingFunctions() {
-  //通过字符串键映射到不同的路由函数，&运算符用于获取函数的地址，这些函数被注册到
-  //gRoutingFunctionMap中，对应于上面的字符串键
+  //向booksim注册路由函数，在.hpp文件中定义的
   gRoutingFunctionMap["dor_hamingmesh"] = &dor_cmesh;
   gRoutingFunctionMap["dor_no_express_hammingmesh"] = &dor_no_express_cmesh;
   gRoutingFunctionMap["xy_yx_hammingmesh"] = &xy_yx_cmesh;
@@ -82,10 +81,10 @@ void HammingMesh::_ComputeSize( const Configuration &config ) {
   ostringstream router_name;
   
 
-  //给全局常量赋值
+  //给全局常量赋值,先给_k赋值为a，然后再给gk赋值为_k
   gK = _k = a ;//每个维度的路由器数量，假设为3
-  gN = _n =  ;//维度的值，假设为2
-  gC = _c = node ;//每个路由器的终端数量.假设为2
+  gN = _n = b;//维度的值，假设为2
+  gC = _c = 2 ;//每个路由器的终端数量.假设为2
 
   _num_nodes    = _c * _num_routers; // 计算网络中的节点总数=c*路由器总数
   _num_routers = a*b*x*y;    // 整个网络的路由器数量
@@ -98,7 +97,7 @@ void HammingMesh::_ComputeSize( const Configuration &config ) {
 void CMesh::_BuildNet( const Configuration& config ) {
   //计算当前路由器在hammingmesh中的位置
   int *location;
-
+  
   //standard trace configuration 
   if(gTrace){
     cout<<"Setup Finished Router"<<endl;
@@ -123,8 +122,7 @@ void CMesh::_BuildNet( const Configuration& config ) {
 
     // Router index derived from mesh index
     //计算该节点在hammingmesh中的坐标
-    y_index = node / _k ;
-    x_index = node % _k ;
+    location=IdToLocation(node)
 
     //计算每个路由器的输入和输出端口的数量，每多一维就增加两个方向的端口
     const int degree_in  = 2 *_n + _c ;
