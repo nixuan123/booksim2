@@ -38,19 +38,20 @@
 //  $Id$
 // 
 ////////////////////////////////////////////////////////////////////////
-#ifndef _HammingMESH_HPP_
-#define _HammingMESH_HPP_
+#ifndef _HAMMINGMESH_HPP_
+#define _HAMMINGMESH_HPP_
 //包含了网络和函数的声明
 #include "network.hpp"
 #include "routefunc.hpp"
-//定义了一个CMesh的网络拓扑，它继承自Network类
+//定义了一个HammingMesh的网络拓扑，它继承自Network类
 class HammingMesh : public Network {
 public:
   //使用配置信息和网络名称来初始化CMesh实例
-  HamingMesh( const Configuration &config, const string & name );
+  HammingMesh( const Configuration &config, const string & name );
   int GetN() const;//用于返回网络的维度
   int GetK() const;//用于返回每个维度上路由器的数量
 
+  static int IdToLocation( int route_id);//将路由器id转换为在拓扑中的位置
   static int NodeToRouter( int address ) ;//将节点地址转换为路由器id
   static int NodeToPort( int address ) ;//将节点地址转换为端口号
 
@@ -58,37 +59,38 @@ public:
 
 private:
 
-  static int _cX ;
-  static int _cY ;
-
-  static int _memo_NodeShiftX ;
-  static int _memo_NodeShiftY ;
-  static int _memo_PortShiftY ;
 
   void _ComputeSize( const Configuration &config );//根据配置信息计算网络的大小
   void _BuildNet( const Configuration& config );//构建网络，包括初始化路由器和通道
 
-  int _k ;
-  int _n ;
-  int _c ;
-  int _xcount;
-  int _ycount;
-  int _xrouter;
-  int _yrouter;
-  bool _express_channels;
+  int a ;
+  int b ;
+  int x ;
+  int y ;
+
+//前两个是板内的维度大小，后面两个是hm/板间维度的大小
+  int* dim_size;
+  int* dim_width;
+    
+  int (* port_start)[2]; // port_start[dim][direction: 0=pos, 1=neg]
+  int num_local_ports;//每个路由器需要连接的主机端口数量
+  int *num_switch_ports;//【新增】行、列交换机分别需要的端口数量
+  int hm_id;//【新增】路由器的hm板id
+  int local_port_start;
+
 };
 
 //
 // Routing Functions
 //
 //路由函数
-void xy_yx_cmesh( const Router *r, const Flit *f, int in_channel, 
+void xy_yx_hammingmesh( const Router *r, const Flit *f, int in_channel, 
 		  OutputSet *outputs, bool inject ) ;
 
-void xy_yx_no_express_cmesh( const Router *r, const Flit *f, int in_channel, 
+void xy_yx_no_express_hammingmesh( const Router *r, const Flit *f, int in_channel, 
 			     OutputSet *outputs, bool inject ) ;
 //实现了基于XY-YX路由策略的路由函数，前者考虑了快速通道，后者没有
-void dor_cmesh( const Router *r, const Flit *f, int in_channel, 
+void dor_hammingmesh( const Router *r, const Flit *f, int in_channel, 
 		OutputSet *outputs, bool inject ) ;
 
 void dor_no_express_cmesh( const Router *r, const Flit *f, int in_channel, 
