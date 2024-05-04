@@ -156,11 +156,8 @@ void CMesh::_BuildNet( const Configuration& config ) {
     // Processing node channels
     //构建每个路由器到本地处理节点的通道，通过两层嵌套for循环遍历所有的处理节点
     //然后为每个处理节点创建输入和输出通道，并将它们添加到当前正在构建的路由器中
-    for (int y = 0; y < _cY ; y++) {//y = 0、1
-      for (int x = 0; x < _cX ; x++) {//x = 0
-	//假设(x,y)=(1,1),link=(3*1)*(2*1+0)+(1*1+0)=7
-	//_cx=1,_cy=2,k=3 link=(3*1)*(2*1+1)+(1*1+0)=9
-	int link = (_k * _cX) * (_cY * y_index + y) + (_cX * x_index + x) ;
+    for (int i = 0; i < _c ; i++) {
+        int link = a ;
 	assert( link >= 0 ) ;
 	assert( link < _nodes ) ;
 	assert( channel_vector[ link ] == false ) ;
