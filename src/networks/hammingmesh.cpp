@@ -122,15 +122,19 @@ void CMesh::_BuildNet( const Configuration& config ) {
 
     // Router index derived from mesh index
     //计算该节点在hammingmesh中的坐标
-    location=IdToLocation(node)
+    location=IdToLocation(node);
+    int a = location[0];
+    int b = location[1];
+    int x = location[2];
+    int y = location[3];
 
     //计算每个路由器的输入和输出端口的数量，每多一维就增加两个方向的端口
-    const int degree_in  = 2 *_n + _c ;
-    const int degree_out = 2 *_n + _c ;
+    const int degree_in  = 2 * 2 + _c ;
+    const int degree_out = 2 * 2 + _c ;
 
     //构建当前节点的路由器名称，创建一个新的路由器对象，并将其
     //添加到_timed_modules容器中，然后清空name字符串以备下一个路由器使用
-    name << "router_" << y_index << '_' << x_index;
+    name << "router_" << a << '_' << b << '_' << x << '_' << y;
     _routers[node] = Router::NewRouter( config, 
 					this, 
 					name.str(), 
