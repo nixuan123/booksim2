@@ -46,12 +46,7 @@
 #include "random_utils.hpp"
 #include "misc_utils.hpp"
 #include "hammingmesh.hpp"
-//全局变量的设置
-int HammingMesh::_cX = 0 ;
-int HammingMesh::_cY = 0 ;
-int HammingMesh::_memo_NodeShiftX = 0 ;
-int HammingMesh::_memo_NodeShiftY = 0 ;
-int HammingMesh::_memo_PortShiftY = 0 ;
+
 
 HammingMesh::HammingMesh( const Configuration& config, const string & name ) 
   : Network(config, name) 
