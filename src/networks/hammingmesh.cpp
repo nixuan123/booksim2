@@ -9,32 +9,35 @@
  //#include "iq_router.hpp"
 
 
-KNCube::KNCube( const Configuration &config, const string & name, bool mesh ) :
+HammingMesh::HammingMesh( const Configuration &config, const string & name ) :
 Network( config, name )
 {
-  _mesh = mesh;
-
   _ComputeSize( config );
   _Alloc( );
   _BuildNet( config );
 }
 //一个主机，每个维度上有两条输出通道和输入通道
-void KNCube::_ComputeSize( const Configuration &config )
+void HammingMesh::_ComputeSize( const Configuration &config )
 {
-  _k = config.GetInt( "k" );
-  _n = config.GetInt( "n" );
+  _a = config.GetInt( "a" );
+  _b = config.GetInt( "b" );
+  _x = config.GetInt( "x" );
+  _y = config.GetInt( "y" );
 
-  gK = _k; gN = _n;
-  _size     = powi( _k, _n );
-  _channels = 2*_n*_size;
+  //整个拓扑的路由器数量
+  _num_routers     = _a*_b*_x*_y;
+  //整个拓扑交换机的数量
+  _num_switches = _x+_y;
+  //整个拓扑通道的数量
+  _channels = 2*2*_num_routers+(2*_a*_y)*_x+(2*_b*_x)*_y;
 
-  _nodes = _size;
+  _nodes = _num_routers+_num_switches;
 }
 
-void KNCube::RegisterRoutingFunctions() {
+void HammingMesh::RegisterRoutingFunctions() {
 
 }
-void KNCube::_BuildNet( const Configuration &config )
+void HammingMesh::_BuildNet( const Configuration &config )
 {
   int left_node;
   int right_node;
@@ -135,7 +138,7 @@ void KNCube::_BuildNet( const Configuration &config )
   }
 }
 
-int KNCube::_LeftChannel( int node, int dim )
+int HammingMesh::_LeftChannel( int node, int dim )
 {
   // The base channel for a node is 2*_n*node
   int base = 2*_n*node;
@@ -145,7 +148,7 @@ int KNCube::_LeftChannel( int node, int dim )
   return ( base + off );
 }
 
-int KNCube::_RightChannel( int node, int dim )
+int HammingMesh::_RightChannel( int node, int dim )
 {
   // The base channel for a node is 2*_n*node
   int base = 2*_n*node;
@@ -154,7 +157,7 @@ int KNCube::_RightChannel( int node, int dim )
   return ( base + off );
 }
 //这个函数是找寻该路由器在dim维度中的左邻居路由器节点
-int KNCube::_LeftNode( int node, int dim )
+int HammingMesh::_LeftNode( int node, int dim )
 {
   //假设是3维立方体结构
   //一层有多少户"人口"
@@ -172,7 +175,7 @@ int KNCube::_LeftNode( int node, int dim )
   return left_node;
 }
 
-int KNCube::_RightNode( int node, int dim )
+int HammingMesh::_RightNode( int node, int dim )
 {
   int k_to_dim = powi( _k, dim );
   int loc_in_dim = ( node / k_to_dim ) % _k;
@@ -187,6 +190,52 @@ int KNCube::_RightNode( int node, int dim )
   return right_node;
 }
 
+int HammingMesh::_IdToLocation(int run_id, int *location) {
+    int hm_id = 0;
+    int inner_id = 0;
+    int num = 0;
+    
+    int i;
+    // 初始化location数组
+    for (i = 0; i < 4; i++) {
+        location[i] = 0;
+    }
+    //switch_fid【新增】是新定义的全局变量，用于存储hm拓扑的起始交换机id
+    if (0 < run_id && run_id < switch_fid) {
+        // 设置前两位
+        inner_id = run_id % (dim_size[0] * dim_size[1]);
+        location[0] = inner_id % dim_size[1];
+        location[1] = inner_id / dim_size[1];
+
+        // 设置后两位
+        hm_id = run_id / (dim_size[0] * dim_size[1]);
+        location[2] = hm_id % dim_size[3];
+        location[3] = hm_id / dim_size[3];
+    } else if (switch_fid <= run_id && run_id < switch_fid + dim_size[2]) {
+        // 设置前两位
+        location[0] = run_id;
+        location[1] = run_id;
+
+        // 设置后两位
+        num = run_id - switch_fid;
+        location[2] = run_id;
+        location[3] = num;
+    } else if (switch_fid + dim_size[2] <= run_id && run_id < switch_fid + dim_size[2] + dim_size[3]) {
+        // 设置前两位为 run_id
+        location[0] = run_id;
+        location[1] = run_id;
+
+        // 设置后两位
+        num = run_id - (switch_fid + _dim_size[2]);
+        location[2] = num;
+        location[3] = run_id;
+    } else {
+        // 如果 rtr_id 不在预期的范围内，设置每个位置为 run_id
+        for (i = 0; i < 4; i++) {
+            location[i] = run_id;
+        }
+    }
+}
 int KNCube::GetN( ) const
 {
   return _n;
@@ -198,7 +247,7 @@ int KNCube::GetK( ) const
 }
 
 /*legacy, not sure how this fits into the new scheme of things*/
-void KNCube::InsertRandomFaults( const Configuration &config )
+void HammingMesh::InsertRandomFaults( const Configuration &config )
 {
   int num_fails = config.GetInt( "link_failures" );
   
@@ -289,7 +338,7 @@ void KNCube::InsertRandomFaults( const Configuration &config )
   }
 }
 
-double KNCube::Capacity( ) const
+double HammingMesh::Capacity( ) const
 {
   return (double)_k / ( _mesh ? 8.0 : 4.0 );
 }
