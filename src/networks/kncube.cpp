@@ -51,7 +51,7 @@ Network( config, name )
   _Alloc( );
   _BuildNet( config );
 }
-
+//一个主机，每个维度上有两条输出通道和输入通道
 void KNCube::_ComputeSize( const Configuration &config )
 {
   _k = config.GetInt( "k" );
@@ -77,7 +77,7 @@ void KNCube::_BuildNet( const Configuration &config )
 
   int right_output;
   int left_output;
-
+  //创建了一个ostringstream对象，它是一个能将输出流定向到一个字符串的类
   ostringstream router_name;
 
   //latency type, noc or conventional network
@@ -85,7 +85,7 @@ void KNCube::_BuildNet( const Configuration &config )
   use_noc_latency = (config.GetInt("use_noc_latency")==1);
   
   for ( int node = 0; node < _size; ++node ) {
-
+    //将字符串"router"插入到router_name对象中
     router_name << "router";
     
     if ( _k > 1 ) {
@@ -93,7 +93,7 @@ void KNCube::_BuildNet( const Configuration &config )
 	router_name << "_" << ( node / dim_offset ) % _k;
       }
     }
-
+    //2*_n+1代表路由器的出度和入度
     _routers[node] = Router::NewRouter( config, this, router_name.str( ), 
 					node, 2*_n + 1, 2*_n + 1 );
     _timed_modules.push_back(_routers[node]);
@@ -186,10 +186,13 @@ int KNCube::_RightChannel( int node, int dim )
   int off  = 2*dim;
   return ( base + off );
 }
-
+//这个函数是找寻该路由器在dim维度中的左邻居路由器节点
 int KNCube::_LeftNode( int node, int dim )
 {
+  //假设是3维立方体结构
+  //一层有多少户"人口"
   int k_to_dim = powi( _k, dim );
+  //该住户在第"几层"
   int loc_in_dim = ( node / k_to_dim ) % _k;
   int left_node;
   // if at the left edge of the dimension, wraparound
