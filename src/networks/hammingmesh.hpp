@@ -11,6 +11,8 @@ class HammingMesh : public Network {
   int _b;
   int _x;
   int _y;
+  int _num_routers;
+  int _num_switches;
 
   void _ComputeSize( const Configuration &config );
   void _BuildNet( const Configuration &config );
