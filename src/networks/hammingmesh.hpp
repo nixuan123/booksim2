@@ -7,8 +7,10 @@ class KNCube : public Network {
 
   bool _mesh;//一个布尔值，表示网络是否是网格状的
 
-  int _k;
-  int _n;
+  int _a;
+  int _b;
+  int _x;
+  int _y;
 
   void _ComputeSize( const Configuration &config );
   void _BuildNet( const Configuration &config );
@@ -23,7 +25,7 @@ class KNCube : public Network {
 
 public:
   //公共方法，这些方法可以被类的实例或其他类使用
-  KNCube( const Configuration &config, const string & name, bool mesh );
+  HammingMesh( const Configuration &config, const string & name, bool mesh );
   static void RegisterRoutingFunctions();
 
   int GetN( ) const;
