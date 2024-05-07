@@ -3,7 +3,7 @@
 
 #include "network.hpp"
 
-class KNCube : public Network {
+class HammingMesh : public Network {
 
   bool _mesh;//一个布尔值，表示网络是否是网格状的
 
