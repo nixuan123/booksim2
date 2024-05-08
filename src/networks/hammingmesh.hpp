@@ -26,7 +26,7 @@ class HammingMesh : public Network {
   int _RightNode( int node, int dim );
 
   //获取路由器在拓扑中的位置
-  void _IdToLocation( int node, int* location);
+  void _IdToLocation( int run_id, int *location);
   //获取路由器的行列交换机信息
   std::vector<int> _EdgeRouterGetSwitchIds(int rtr_id);
 
