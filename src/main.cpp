@@ -84,6 +84,7 @@ int gN;//dimension
 int gC;//concentration
 int gP_hammingmesh;//【新增】
 int gA_hammingmesh;//【新增】
+int* dim_size;//【新增】
 int gNodes;
 
 //generate nocviewer trace
