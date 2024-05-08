@@ -45,6 +45,7 @@ extern int gN;
 extern int gC;
 extern int gA_hammingmesh;//【新增】
 extern int gP_hammingmesh;//【新增】
+extern int dim_size;//【新增】
 extern int gNodes;
 
 extern bool gTrace;
