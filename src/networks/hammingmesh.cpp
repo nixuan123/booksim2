@@ -8,7 +8,11 @@
 #include "misc_utils.hpp"
  //#include "iq_router.hpp"
 
-
+const int switch_fid;
+std::vector<int> switch_ids;
+std::map<int, int> switch_port;
+std::vector<std::vector<int>> switch_loc;
+std::vector<int> _dim_size;
 HammingMesh::HammingMesh( const Configuration &config, const string & name ) :
 Network( config, name )
 {
@@ -23,7 +27,11 @@ void HammingMesh::_ComputeSize( const Configuration &config )
   _b = config.GetInt( "b" );
   _x = config.GetInt( "x" );
   _y = config.GetInt( "y" );
-
+  //dim_size已被设置为全局变量
+  _dim_size[0]=_a;
+  _dim_size[1]=_b;
+  _dim_size[2]=_x;
+  _dim_size[3]=_y;
   //整个拓扑的路由器数量
   _num_routers     = _a*_b*_x*_y;
   //整个拓扑交换机的数量
@@ -39,6 +47,7 @@ void HammingMesh::RegisterRoutingFunctions() {
 }
 void HammingMesh::_BuildNet( const Configuration &config )
 {
+  int* mylocation;
   int left_node;
   int right_node;
 
@@ -54,23 +63,24 @@ void HammingMesh::_BuildNet( const Configuration &config )
   bool use_noc_latency;
   use_noc_latency = (config.GetInt("use_noc_latency")==1);
   
-  for ( int node = 0; node < _size; ++node ) {
+  for ( int node = 0; node < _num_routers+_num_switches; ++node ) {
+    if(node < _num_routers){
     //将字符串"router"插入到router_name对象中
     router_name << "router";
+    //将路由器的id转换为在拓扑中的位置，比如mylocation=[0,0,1,0]
+    _IdToLocation(node,mylocation);
+    //给路由器命名
+    router_name << location[0] <<locaiton[1]<<location[2]<<location[3];
     
-    if ( _k > 1 ) {
-      for ( int dim_offset = _size / _k; dim_offset >= 1; dim_offset /= _k ) {
-	router_name << "_" << ( node / dim_offset ) % _k;
-      }
-    }
-    //2*_n+1代表路由器的出度和入度
+    //2*n+1代表路由器的出度和入度,在这里规定n=2，只可能是二维的
     _routers[node] = Router::NewRouter( config, this, router_name.str( ), 
-					node, 2*_n + 1, 2*_n + 1 );
+					node, 2*2 + 1, 2*2 + 1 );
     _timed_modules.push_back(_routers[node]);
 
+    //将字符串对象内容重置为空串，以便下一次的命名
     router_name.str("");
 
-    for ( int dim = 0; dim < _n; ++dim ) {
+    for ( int dim = 0; dim < 2; ++dim ) {
 
       //find the neighbor 
       left_node  = _LeftNode( node, dim );
@@ -86,7 +96,7 @@ void HammingMesh::_BuildNet( const Configuration &config )
       //
 
       // torus channel is longer due to wrap around
-      int latency = _mesh ? 1 : 2 ;
+      int latency =  1 ;
 
       //get the input channel number
       right_input = _LeftChannel( right_node, dim );
@@ -136,6 +146,11 @@ void HammingMesh::_BuildNet( const Configuration &config )
     _inject[node]->SetLatency( 1 );
     _eject[node]->SetLatency( 1 );
   }
+  }
+  //给交换机配置链路
+  else{
+		
+	}
 }
 
 int HammingMesh::_LeftChannel( int node, int dim )
@@ -156,15 +171,23 @@ int HammingMesh::_RightChannel( int node, int dim )
   int off  = 2*dim;
   return ( base + off );
 }
-//这个函数是找寻该路由器在dim维度中的左邻居路由器节点
+//这个函数是找寻该路由器在dim维度中的左邻居路由器节点id
 int HammingMesh::_LeftNode( int node, int dim )
 {
-  //假设是3维立方体结构
-  //一层有多少户"人口"
-  int k_to_dim = powi( _k, dim );
-  //该住户在第"几层"
-  int loc_in_dim = ( node / k_to_dim ) % _k;
+  int* location;
+  _IdToLocation(node,location);//比如node=4，现在location=[0,0,1,0] 
   int left_node;
+  if(dim==0){
+	if( location[0]>0)
+	{
+		left_node=node-1;
+	}else{
+		left_node=
+	}
+  }else{
+	  
+  }
+  
   // if at the left edge of the dimension, wraparound
   if ( loc_in_dim == 0 ) {
     left_node = node + (_k-1)*k_to_dim;
@@ -236,6 +259,9 @@ int HammingMesh::_IdToLocation(int run_id, int *location) {
         }
     }
 }
+
+
+
 int KNCube::GetN( ) const
 {
   return _n;
