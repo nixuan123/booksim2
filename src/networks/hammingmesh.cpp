@@ -1,5 +1,6 @@
 #include "booksim.hpp"
 #include <vector>
+#include <map>
 #include <sstream>
 #include <ctime>
 #include <cassert>
@@ -9,11 +10,13 @@
  //#include "iq_router.hpp"
 
 int switch_fid;
+int switch_fchannel;
 std::vector<int> switch_ids;
 std::map<int, int> switch_port;
 std::vector<std::vector<int>> switch_loc;
 std::vector<int> _dim_size;
 std::map<int, std::vector<int>> switch_to_routers;
+std::map<int, std::vector<std::vector<int>>> switch_to_channels;
 
 HammingMesh::HammingMesh( const Configuration &config, const string & name ) :
 Network( config, name )
@@ -39,9 +42,13 @@ void HammingMesh::_ComputeSize( const Configuration &config )
   _num_routers     = _a*_b*_x*_y;
   //整个拓扑交换机的数量
   _num_switches = _x+_y;
+  
   //交换机的起始id
   switch_fid = _dim_size[0] * _dim_size[1] * _dim_size[2] * _dim_size[3];
-
+  
+  //交换机的起始通道号
+  switch_fchannel=2*2*_num_routers;
+  
   //给switch_ids集合赋值，例如switch_ids=[16,17,18,19]
   for (int i = 0; i < num_switches; ++i) {
     switch_ids.push_back(switch_fid + i);
@@ -51,10 +58,10 @@ void HammingMesh::_ComputeSize( const Configuration &config )
   for (int i = 0; i < num_switches; ++i) {
     switch_port[switch_ids[i]] = -1;
   }	
-  //将switch_loc初始化
-  std::vector<int> index;
+  //创建一个集合，用于存储交换机映射后的位置
+  int* s_loc;
   for (int i = 0; i < num_switches; ++i) {
-    _IdToLocation(switch_ids[i],index)
+    _IdToLocation(switch_ids[i],s_loc)
     switch_loc.push_back(index);
   }
 
@@ -62,6 +69,9 @@ void HammingMesh::_ComputeSize( const Configuration &config )
   for (int i = 0; i < num_switches; ++i) {
     switch_to_routers[switch_ids[i]] = std::vector<int>();
   }
+
+  //将switch_channels初始化，比如switch_channels=[16:[[],[],..],17:[[],[],..],..]
+  
   //整个拓扑通道的数量,路由器的通道数加上行列交换机的通道数
   _channels = 2*2*_num_routers+(2*_a*_y)*_x+(2*_b*_x)*_y;
 
@@ -93,8 +103,8 @@ void KNCube::_BuildNet( const Configuration &config )
   for ( int node = 0; node < _num_routers+_num_switches; ++node ) {
     //将字符串"router"插入到router_name对象中
     router_name << "router";
-    
-    router_name << location[0] <<locaiton[1]<<location[2]<<location[3];
+    _IdToLocation(node,my_location);
+    router_name << my_location[0] <<my_location[1]<<my_location[2]<<my_location[3];
     if(node<_num_routers){
     //2*_n+1代表路由器的出度和入度
     _routers[node] = Router::NewRouter( config, this, router_name.str( ), 
@@ -119,7 +129,7 @@ void KNCube::_BuildNet( const Configuration &config )
       //
 
       // torus channel is longer due to wrap around
-      int latency = _mesh ? 1 : 2 ;
+      int latency = 2;
 
       //get the input channel number
       right_input = _LeftChannel( node, right_node, dim );
@@ -202,7 +212,7 @@ int HammingMesh::_RightChannel( int node, int other_node, int dim )
   int off  = 2*dim;
   return ( base + off );
   }else{
-	  //查询表格对应通道
+	  //查表找对应通道
   }
 }
 //这个函数是找寻该路由器在dim维度中的左邻居路由器/交换机节点id（难点）
@@ -261,28 +271,28 @@ int HammingMesh::_RightNode( int node, int dim )
 return right_node;
 }
 
-int HammingMesh::_IdToLocation(int run_id, int *location) {
+int HammingMesh::_IdToLocation(int run_id, vector<int>& location) {
     int hm_id = 0;
     int inner_id = 0;
     int num = 0;
     
     int i;
     // 初始化location数组
-    for (i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) {
         location[i] = 0;
     }
 	
     if (0 < run_id && run_id < switch_fid) {
         // 设置前两位
-        inner_id = run_id % (dim_size[0] * dim_size[1]);
-        location[0] = inner_id % dim_size[1];
-        location[1] = inner_id / dim_size[1];
+        inner_id = run_id % (_dim_size[0] * _dim_size[1]);
+        location[0] = inner_id % _dim_size[1];
+        location[1] = inner_id / _dim_size[1];
 
         // 设置后两位
-        hm_id = run_id / (dim_size[0] * dim_size[1]);
-        location[2] = hm_id % dim_size[3];
-        location[3] = hm_id / dim_size[3];
-    } else if (switch_fid <= run_id && run_id < switch_fid + dim_size[2]) {
+        hm_id = run_id / (_dim_size[0] * _dim_size[1]);
+        location[2] = hm_id % _dim_size[3];
+        location[3] = hm_id / _dim_size[3];
+    } else if (switch_fid <= run_id && run_id < switch_fid + _dim_size[2]) {
         // 设置前两位
         location[0] = run_id;
         location[1] = run_id;
@@ -291,7 +301,7 @@ int HammingMesh::_IdToLocation(int run_id, int *location) {
         num = run_id - switch_fid;
         location[2] = run_id;
         location[3] = num;
-    } else if (switch_fid + dim_size[2] <= run_id && run_id < switch_fid + dim_size[2] + dim_size[3]) {
+    } else if (switch_fid + _dim_size[2] <= run_id && run_id < switch_fid + _dim_size[2] + _dim_size[3]) {
         // 设置前两位为 run_id
         location[0] = run_id;
         location[1] = run_id;
@@ -310,8 +320,8 @@ int HammingMesh::_IdToLocation(int run_id, int *location) {
 
 std::vector<int> HammingMesh::_EdgeRouterGetSwitchIds(int rtr_id){
 	//初始化一个空vector用于保存当前路由器的行列交换机信息
-	std::vector<int> my_switches(2,0)
-	int* location;
+	std::vector<int> my_switches(2,0);
+	std::vector<int> location;
 	_IdToLocation(rtr_id,location);
 	// 判断路由器是否在对角的位置
         if (((loc[0] == 0 && loc[1] == 0) ||
