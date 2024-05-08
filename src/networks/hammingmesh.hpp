@@ -25,6 +25,11 @@ class HammingMesh : public Network {
   int _LeftNode( int node, int dim );
   int _RightNode( int node, int dim );
 
+  //获取路由器在拓扑中的位置
+  void _IdToLocation( int node, int* location);
+  //获取路由器的行列交换机信息
+  std::vector<int> _EdgeRouterGetSwitchIds(int rtr_id);
+
 public:
   //公共方法，这些方法可以被类的实例或其他类使用
   HammingMesh( const Configuration &config, const string & name, bool mesh );
