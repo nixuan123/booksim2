@@ -95,6 +95,7 @@ void KNCube::_BuildNet( const Configuration &config )
     router_name << "router";
     
     router_name << location[0] <<locaiton[1]<<location[2]<<location[3];
+    if(node<_num_routers){
     //2*_n+1代表路由器的出度和入度
     _routers[node] = Router::NewRouter( config, this, router_name.str( ), 
 					node, 2*2+ 1, 2*2 + 1 );
@@ -121,8 +122,8 @@ void KNCube::_BuildNet( const Configuration &config )
       int latency = _mesh ? 1 : 2 ;
 
       //get the input channel number
-      right_input = _LeftChannel( right_node, dim );
-      left_input  = _RightChannel( left_node, dim );
+      right_input = _LeftChannel( node, right_node, dim );
+      left_input  = _RightChannel( node, left_node, dim );
 
       //add the input channel
       _routers[node]->AddInputChannel( _chan[right_input], _chan_cred[right_input] );
@@ -167,29 +168,44 @@ void KNCube::_BuildNet( const Configuration &config )
     _routers[node]->AddOutputChannel( _eject[node], _eject_cred[node] );
     _inject[node]->SetLatency( 1 );
     _eject[node]->SetLatency( 1 );
+    }
+    //配置交换机的输入输出链路
+    else{
+	  
+    }
   }
+ 
 }
 
 
-int HammingMesh::_LeftChannel( int node, int dim )
+int HammingMesh::_LeftChannel( int node, int other_node, int dim )
 {
+  if(other_node<_num_routers){
   // The base channel for a node is 2*_n*node
   int base = 2*_n*node;
   // The offset for a left channel is 2*dim + 1
   int off  = 2*dim + 1;
 
   return ( base + off );
+  }
+  else{
+	  
+  }
 }
 
-int HammingMesh::_RightChannel( int node, int dim )
+int HammingMesh::_RightChannel( int node, int other_node, int dim )
 {
+  if(other_node<_num_routers){
   // The base channel for a node is 2*_n*node
-  int base = 2*_n*node;
+  int base = 2*2*node;
   // The offset for a right channel is 2*dim 
   int off  = 2*dim;
   return ( base + off );
+  }else{
+	  //查询表格对应通道
+  }
 }
-//这个函数是找寻该路由器在dim维度中的左邻居路由器节点id（难点）
+//这个函数是找寻该路由器在dim维度中的左邻居路由器/交换机节点id（难点）
 int HammingMesh::_LeftNode( int node, int dim )
 {
   int* location;
@@ -197,8 +213,7 @@ int HammingMesh::_LeftNode( int node, int dim )
   std::vector<int> my_switches(2,0);
   int left_node=0;
   if(dim==0){
-	if( location[0]>0)
-	{
+	if( location[0]>0){
 	    left_node=node-1;
 	}else{
 		//返回行交换机的id
@@ -207,8 +222,7 @@ int HammingMesh::_LeftNode( int node, int dim )
 	}
   }
   if(dim==1){
-	if(location[1]<_dim_size[0])
-	{
+	if(location[1]<_dim_size[0]){
 	    left_node=node+_dim_size[1]	  
 	}else{
 		//返回列交换机的id
@@ -217,7 +231,7 @@ int HammingMesh::_LeftNode( int node, int dim )
 	}	  
   }
 
-  return left_node;
+return left_node;
 }
 
 int HammingMesh::_RightNode( int node, int dim )
@@ -226,8 +240,7 @@ int HammingMesh::_RightNode( int node, int dim )
   _IdToLocation(node,location);//比如node=4，现在location=[0,0,1,0] 
   int right_node=0;
   if(dim==0){
-	if( location[0]<_dim_size[1]-1)
-	{
+	if( location[0]<_dim_size[1]-1){
 	    right_node=node+1;
 	}else{
 		//返回行交换机的id
@@ -236,19 +249,16 @@ int HammingMesh::_RightNode( int node, int dim )
 	}
   }
   if(dim==1){
-	if(location[1]>0)
-	{
+	if(location[1]>0){
 	    right_node=node-_dim_size[1]	  
 	}else{
 		//返回列交换机的id
 		my_switches=_EdgeRouterGetSwitchIds(node);
 		right_node=my_switches[1];
 	}
-	  
-  }
-
-  return left_node;
-  return right_node;
+   }
+  
+return right_node;
 }
 
 int HammingMesh::_IdToLocation(int run_id, int *location) {
