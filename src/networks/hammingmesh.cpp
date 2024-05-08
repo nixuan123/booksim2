@@ -59,7 +59,7 @@ void HammingMesh::_ComputeSize( const Configuration &config )
     switch_port[switch_ids[i]] = -1;
   }	
   //创建一个集合，用于存储交换机映射后的位置
-  int* s_loc;
+  vector<int> s_loc(4,0);
   for (int i = 0; i < num_switches; ++i) {
     _IdToLocation(switch_ids[i],s_loc)
     switch_loc.push_back(index);
@@ -271,7 +271,7 @@ int HammingMesh::_RightNode( int node, int dim )
 return right_node;
 }
 
-int HammingMesh::_IdToLocation(int run_id, vector<int>& location) {
+vector<int> HammingMesh::_IdToLocation(int run_id, vector<int>& location) {
     int hm_id = 0;
     int inner_id = 0;
     int num = 0;
