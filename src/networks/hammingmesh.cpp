@@ -271,7 +271,7 @@ int HammingMesh::_RightNode( int node, int dim )
 return right_node;
 }
 
-vector<int> HammingMesh::_IdToLocation(int run_id, vector<int>& location) {
+void HammingMesh::_IdToLocation(int run_id, vector<int>& location) {
     int hm_id = 0;
     int inner_id = 0;
     int num = 0;
