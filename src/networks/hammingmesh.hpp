@@ -11,7 +11,6 @@ class HammingMesh : public Network {
   int _b;
   int _x;
   int _y;
-  int* _dim_size;
   int _num_routers;
   int _num_switches;
 
