@@ -10,13 +10,15 @@
  //#include "iq_router.hpp"
 
 int switch_fid;
-int switch_fchannel;
+int switch_x_fchannel;
+int switch_y_fchannel;
 std::vector<int> switch_ids;
 std::map<int, int> switch_port;
 std::vector<std::vector<int>> switch_loc;
 std::vector<int> _dim_size;
 std::map<int, std::vector<int>> switch_to_routers;
-std::map<int, std::vector<std::vector<int>>> switch_to_channels;
+std::map<int, std::vector<std::vector<int>>> switch_input_channels;
+std::map<int, std::vector<std::vector<int>>> switch_output_channels;
 
 HammingMesh::HammingMesh( const Configuration &config, const string & name ) :
 Network( config, name )
@@ -46,8 +48,11 @@ void HammingMesh::_ComputeSize( const Configuration &config )
   //交换机的起始id
   switch_fid = _dim_size[0] * _dim_size[1] * _dim_size[2] * _dim_size[3];
   
-  //交换机的起始通道号
-  switch_fchannel=2*2*_num_routers;
+  //行交换机起始通道号
+  switch_x_fchannel=2*2*_num_routers;
+
+  //列交换机的起始通道号
+  switch_y_fchannel=switch_x_fchannel+(2*_a*_y)*_x;
   
   //给switch_ids集合赋值，例如switch_ids=[16,17,18,19]
   for (int i = 0; i < num_switches; ++i) {
@@ -62,7 +67,7 @@ void HammingMesh::_ComputeSize( const Configuration &config )
   vector<int> s_loc(4,0);
   for (int i = 0; i < num_switches; ++i) {
     _IdToLocation(switch_ids[i],s_loc)
-    switch_loc.push_back(index);
+    switch_loc.push_back(s_loc);
   }
 
   //将switch_to_routers初始化，比如switch_to_routers=[16:[],17:[],18:[],19:[]]
@@ -70,8 +75,6 @@ void HammingMesh::_ComputeSize( const Configuration &config )
     switch_to_routers[switch_ids[i]] = std::vector<int>();
   }
 
-  //将switch_channels初始化，比如switch_channels=[16:[[],[],..],17:[[],[],..],..]
-  
   //整个拓扑通道的数量,路由器的通道数加上行列交换机的通道数
   _channels = 2*2*_num_routers+(2*_a*_y)*_x+(2*_b*_x)*_y;
 
@@ -93,13 +96,24 @@ void KNCube::_BuildNet( const Configuration &config )
 
   int right_output;
   int left_output;
+
+  vector<int> s_to_nodes;
+  vector<int> s_input;
+  vector<int> s_output;
   //创建了一个ostringstream对象，它是一个能将输出流定向到一个字符串的类
   ostringstream router_name;
 
   //latency type, noc or conventional network
   bool use_noc_latency;
   use_noc_latency = (config.GetInt("use_noc_latency")==1);
-  
+
+  //建表
+  for ( int node = 0; node < _num_routers+_num_switches; ++node ) {
+	  for ( int dim = 0; dim < 2; ++dim ) { 
+           left_node  = _LeftNode( node, dim );
+           right_node = _RightNode( node, dim );
+  }
+	  
   for ( int node = 0; node < _num_routers+_num_switches; ++node ) {
     //将字符串"router"插入到router_name对象中
     router_name << "router";
@@ -113,12 +127,12 @@ void KNCube::_BuildNet( const Configuration &config )
 
     router_name.str("");
 
-    for ( int dim = 0; dim < _n; ++dim ) {
+    for ( int dim = 0; dim < 2; ++dim ) {
 
       //find the neighbor 
-      left_node  = _LeftNode( node, dim );
-      right_node = _RightNode( node, dim );
-
+      left_node  = find_LeftNode( node, dim );
+      right_node = find_RightNode( node, dim );
+      
       //
       // Current (N)ode
       // (L)eft node
@@ -192,14 +206,19 @@ int HammingMesh::_LeftChannel( int node, int other_node, int dim )
 {
   if(other_node<_num_routers){
   // The base channel for a node is 2*_n*node
-  int base = 2*_n*node;
+  int base = 2*2*node;
   // The offset for a left channel is 2*dim + 1
   int off  = 2*dim + 1;
-
+  
   return ( base + off );
+  
   }
   else{
-	  
+  for(auto &pair:switch_to_channels){
+      for(int num:pair.second ){
+	      if(num)
+      } 
+   }
   }
 }
 
@@ -215,28 +234,47 @@ int HammingMesh::_RightChannel( int node, int other_node, int dim )
 	  //查表找对应通道
   }
 }
-//这个函数是找寻该路由器在dim维度中的左邻居路由器/交换机节点id（难点）
+
+//用于建表
 int HammingMesh::_LeftNode( int node, int dim )
 {
-  int* location;
+  std::vector<int> location(4,0);
   _IdToLocation(node,location);//比如node=4，现在location=[0,0,1,0] 
   std::vector<int> my_switches(2,0);
+  int base = 2*2*node; 
+  int off=0;
   int left_node=0;
   if(dim==0){
 	if( location[0]>0){
 	    left_node=node-1;
-	}else{
+	}else{  //说明在0维度的左节点是（行）交换机
 		//返回行交换机的id
 		my_switches=_EdgeRouterGetSwitchIds(node);
+		off=2*dim+1;
+		//记录路由器的连接节点和输入通道
+		std::vector<int> value = {node,base+off};
+		switch_input_channels[my_switches[0]].push_back(value);	
+		//记录路由器的连接节点和输出通道
+		std::vector<int> value1 = {node,switch_x_fchannel};
+		switch_output_channels[my_switches[0]].push_back(value1);
+		switch_x_fchannel++;
 		left_node=my_switches[0];
 	}
   }
   if(dim==1){
-	if(location[1]<_dim_size[0]){
+	if(location[1]<_dim_size[0]-1){
 	    left_node=node+_dim_size[1]	  
-	}else{
+	}else{  //说明在1维度的左节点是（列）交换机
 		//返回列交换机的id
 		my_switches=_EdgeRouterGetSwitchIds(node);
+		off=2*dim+1;
+		//记录路由器的连接节点和输入通道
+		std::vector<int> value = {node,base+off};
+		switch_input_channels[my_switches[1]].push_back(value);	
+		//记录路由器的连接节点和输出通道
+		std::vector<int> value1 = {node,switch_x_fchannel};
+		switch_output_channels[my_switches[1]].push_back(value1);
+		switch_y_fchannel++;
 		left_node=my_switches[1];
 	}	  
   }
@@ -244,31 +282,93 @@ int HammingMesh::_LeftNode( int node, int dim )
 return left_node;
 }
 
+//用于建表
 int HammingMesh::_RightNode( int node, int dim )
 {
-  int* location;
+  std::vector<int> location(4,0);
   _IdToLocation(node,location);//比如node=4，现在location=[0,0,1,0] 
+  int base = 2*2*node; 
+  int off=0;
   int right_node=0;
   if(dim==0){
 	if( location[0]<_dim_size[1]-1){
 	    right_node=node+1;
-	}else{
+	}else{  //说明在0维度的右节点是（行）交换机
 		//返回行交换机的id
 		my_switches=_EdgeRouterGetSwitchIds(node);
+		off=2*dim;
+		//记录路由器的连接节点和输入通道
+		std::vector<int> value = {node,base+off};
+		switch_input_channels[my_switches[0]].push_back(value);	
+		//记录路由器的连接节点和输出通道
+		std::vector<int> value1 = {node,switch_x_fchannel};
+		switch_output_channels[my_switches[0]].push_back(value1);
+		switch_x_fchannel++;
 		right_node=my_switches[0];
 	}
   }
   if(dim==1){
 	if(location[1]>0){
 	    right_node=node-_dim_size[1]	  
-	}else{
+	}else{  //说明在1维度的右节点是（列）交换机
 		//返回列交换机的id
 		my_switches=_EdgeRouterGetSwitchIds(node);
+		off=2*dim;
+		//记录路由器的连接节点和输入通道
+		std::vector<int> value = {node,base+off};
+		switch_input_channels[my_switches[0]].push_back(value);	
+	        //记录路由器的连接节点和输出通道
+		std::vector<int> value1 = {node,switch_y_fchannel};
+		switch_output_channels[my_switches[1]].push_back(value1);
+		switch_y_fchannel++;
 		right_node=my_switches[1];
 	}
    }
-  
 return right_node;
+}
+
+
+//路由器找左节点的函数
+int HammingMesh::find_LeftNode( int node, int dim )  {
+if(dim==0){
+	if( location[0]>0){
+	    left_node=node-1;
+	}else{
+	    //查表返回（行）交换机	
+	}
+    }
+if(dim==1){
+	if(location[1]<_dim_size[0]-1){
+	    left_node=node+_dim_size[1]	  
+	}else{
+	    //查表返回（列）交换机
+	}
+return left_node;	
+}
+
+//路由器找右节点的函数
+int HammingMesh::find_RightNode( int node, int dim )  {
+if(dim==0){
+	if( location[0]<_dim_size[1]-1){
+	    right_node=node+1;
+	}else{
+	    //查表返回（行）交换机	
+	}
+    }
+if(dim==1){
+	if(location[1]>0){
+	    right_node=node-_dim_size[1]	  
+	}else{
+	    //查表返回（列交换机）
+	}
+return right_node;	
+}
+
+//查表switch_to_routers，用于返回路由器的行或者列交换机
+int HammingMesh::Search_STR(int node){
+	for (auto pair:switch_){
+		
+	}
 }
 
 void HammingMesh::_IdToLocation(int run_id, vector<int>& location) {
@@ -319,9 +419,10 @@ void HammingMesh::_IdToLocation(int run_id, vector<int>& location) {
 }
 
 std::vector<int> HammingMesh::_EdgeRouterGetSwitchIds(int rtr_id){
-	//初始化一个空vector用于保存当前路由器的行列交换机信息
+	int i = rtr_id;
+        //初始化一个空vector用于保存当前路由器的行列交换机信息
 	std::vector<int> my_switches(2,0);
-	std::vector<int> location;
+	std::vector<int> location(4,0);
 	_IdToLocation(rtr_id,location);
 	// 判断路由器是否在对角的位置
         if (((loc[0] == 0 && loc[1] == 0) ||
@@ -332,16 +433,17 @@ std::vector<int> HammingMesh::_EdgeRouterGetSwitchIds(int rtr_id){
              for (auto& location : switch_loc) {
                     if (location[3] == loc[3]) {
                        switch_port[location[0]]++;
-                       switch_to_routers[location[0]].push_back(i);
+                       switch_to_routers[location[0]].push_back(i);	       
                        my_switches[0] = location[0];
                        break;
                      }
 	     }
+             // 找寻列交换机
 	     for (auto& location : switch_loc) {
                     if (location[2] == loc[2]) {
                        switch_port[location[0]]++;
                        switch_to_routers[location[0]].push_back(i);
-                       my_switches[0] = location[0];
+                       my_switches[1] = location[0];
                        break;
 		    }
 	      }
