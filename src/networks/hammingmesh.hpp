@@ -34,6 +34,15 @@ class HammingMesh : public Network {
   //获取路由器的行列交换机信息
   std::vector<int> _EdgeRouterGetSwitchIds(int rtr_id);
 
+  //查找switch_to_routers表格
+  std::vector<int> Search_SIC(int node);
+
+  //查找switch_input_channels表格
+  std::vector<int> Search_SIC(int node);
+  
+  //查找switch_output_channels表格
+  std::vector<int> Search_SOC(int node);
+
 public:
   //公共方法，这些方法可以被类的实例或其他类使用
   HammingMesh( const Configuration &config, const string & name, bool mesh );
