@@ -97,7 +97,6 @@ void KNCube::_BuildNet( const Configuration &config )
   int right_output;
   int left_output;
 
-  vector<int> s_to_nodes;
   vector<int> s_input;
   vector<int> s_output;
   //创建了一个ostringstream对象，它是一个能将输出流定向到一个字符串的类
@@ -204,9 +203,8 @@ void KNCube::_BuildNet( const Configuration &config )
 
     router_name.str("");
     //get the input channel vector
-    std::vector v;
-    v=switch_input_channels[node];
-    for(auto num:v){
+    s_input=switch_input_channels[node];
+    for(auto num:s_input){
        //add the input vector of numbers
        _routers[node]->AddInputChannel( _chan[v[1]], _chan_cred[v[1]] );
        //set input channel latency
@@ -220,8 +218,8 @@ void KNCube::_BuildNet( const Configuration &config )
      }
     
     //get the output channel number
-    v=switch_output_channels[node];
-    for(auto num:v){
+    s_output=switch_output_channels[node];
+    for(auto num:s_output){
        //add the output vector of numbers
        _routers[node]->AddInputChannel( _chan[v[1]], _chan_cred[v[1]] );
        //set input channel latency
