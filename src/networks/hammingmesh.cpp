@@ -568,6 +568,43 @@ std::vector<int> HammingMesh::_EdgeRouterGetSwitchIds(int rtr_id){
 return my_switches;
 }
 
+//min_hammingmesh函数进行路由
+void min_hammingmesh(Router *r,Flit *f,int in_channel,OutputSet *outputs,bool inject){
+  int debug = f->watch;
+  outputs->Clear();
+
+  if(inject)
+  {
+      int inject_vc = RandomInt(gNumVCs-1);
+      outputs->AddRange(-1, inject_vc, inject_vc);
+      return;
+  }
+
+  int rID = r->GetID();
+
+  int out_port = -1;
+  int out_vc = 0;
+
+  if(in_channel < gP_testnet)// source node assign to vc0
+  {
+      out_vc = 0;
+  }
+  else// dest node assign it to vc1
+  {
+      out_vc = 1;
+  }
+
+  out_port = testnet_port(rID, f->src, f->dest);
+
+  outputs->AddRange(out_port, out_vc, out_vc);
+
+  if(debug)
+  {
+      *gWatchOut << GetSimTime()<<" | "<<r->FullName()<<" | "
+          <<" through output port : "<< out_port
+          <<" out vc: "<< out_vc << endl;
+  }
+}
 
 int KNCube::GetN( ) const
 {
