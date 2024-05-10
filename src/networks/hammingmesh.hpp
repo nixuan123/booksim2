@@ -26,8 +26,8 @@ class HammingMesh : public Network {
   int _RightNode( int node, int dim );
 
   //用于找寻路由器相邻节点
-  int find_LeftNode( int node, int dim );
-  int find_RightNode( int node, int dim );
+  int find_LeftNode( int node, int other_node, int dim );
+  int find_RightNode( int node, int other_node, int dim );
 
   //获取路由器在拓扑中的位置
   void _IdToLocation( int run_id, int *location);
