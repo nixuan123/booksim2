@@ -112,6 +112,7 @@ void KNCube::_BuildNet( const Configuration &config )
 	  for ( int dim = 0; dim < 2; ++dim ) { 
            left_node  = _LeftNode( node, dim );
            right_node = _RightNode( node, dim );
+          }
   }
 
   //搭建拓扑
@@ -189,7 +190,7 @@ void KNCube::_BuildNet( const Configuration &config )
 
       }
     }
-    //injection and ejection channel, always 1 latency
+    //injection and ejection channel, always 1 latency, 终端的连接
     _routers[node]->AddInputChannel( _inject[node], _inject_cred[node] );
     _routers[node]->AddOutputChannel( _eject[node], _eject_cred[node] );
     _inject[node]->SetLatency( 1 );
@@ -198,10 +199,40 @@ void KNCube::_BuildNet( const Configuration &config )
     //配置交换机的输入输出链路
     else{
     _routers[node] = Router::NewRouter( config, this, router_name.str( ), 
-					node, 2*2+ 1, 2*2 + 1 );
+					node,switch_port[node]+1, switch_port[node]+1);
     _timed_modules.push_back(_routers[node]);
 
     router_name.str("");
+    //get the input channel vector
+    std::vector v;
+    v=switch_input_channels[node];
+    for(auto num:v){
+       //add the input vector of numbers
+       _routers[node]->AddInputChannel( _chan[v[1]], _chan_cred[v[1]] );
+       //set input channel latency
+       if(use_noc_latency){
+	_chan[v[1]]->SetLatency( latency );
+	_chan_cred[v[1]]->SetLatency( latency );
+      } else {
+	_chan[v[1]]->SetLatency( 1 );
+	_chan_cred[v[1]]->SetLatency( 1 );
+      }	    
+     }
+    
+    //get the output channel number
+    v=switch_output_channels[node];
+    for(auto num:v){
+       //add the output vector of numbers
+       _routers[node]->AddInputChannel( _chan[v[1]], _chan_cred[v[1]] );
+       //set input channel latency
+       if(use_noc_latency){
+	_chan[v[1]]->SetLatency( latency );
+	_chan_cred[v[1]]->SetLatency( latency );
+      } else {
+	_chan[v[1]]->SetLatency( 1 );
+	_chan_cred[v[1]]->SetLatency( 1 );
+      }	    
+     }
     }
   }
  
@@ -282,7 +313,7 @@ int HammingMesh::_LeftNode( int node, int dim )
 		//记录路由器的连接节点和输出通道
 		std::vector<int> value1 = {node,switch_x_fchannel};
 		switch_output_channels[my_switches[1]].push_back(value1);
-		switch_y_fchannel++;
+		switch_y_fchannel++; 
 		left_node=my_switches[1];
 	}	  
   }
