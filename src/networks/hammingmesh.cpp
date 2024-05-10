@@ -107,18 +107,20 @@ void KNCube::_BuildNet( const Configuration &config )
   bool use_noc_latency;
   use_noc_latency = (config.GetInt("use_noc_latency")==1);
 
-  //建表
+  //建表,从路由器0遍历到_num_routers+_num_switches;维度从0->1;行交换机->列交换机;
   for ( int node = 0; node < _num_routers+_num_switches; ++node ) {
 	  for ( int dim = 0; dim < 2; ++dim ) { 
            left_node  = _LeftNode( node, dim );
            right_node = _RightNode( node, dim );
   }
-	  
+
+  //搭建拓扑
   for ( int node = 0; node < _num_routers+_num_switches; ++node ) {
     //将字符串"router"插入到router_name对象中
     router_name << "router";
     _IdToLocation(node,my_location);
     router_name << my_location[0] <<my_location[1]<<my_location[2]<<my_location[3];
+    
     if(node<_num_routers){
     //2*_n+1代表路由器的出度和入度
     _routers[node] = Router::NewRouter( config, this, router_name.str( ), 
@@ -146,8 +148,8 @@ void KNCube::_BuildNet( const Configuration &config )
       int latency = 2;
 
       //get the input channel number
-      right_input = _LeftChannel( node, right_node, dim );
-      left_input  = _RightChannel( node, left_node, dim );
+      right_input = find_LeftChannel( node, right_node, dim );
+      left_input  = find_RightChannel( node, left_node, dim );
 
       //add the input channel
       _routers[node]->AddInputChannel( _chan[right_input], _chan_cred[right_input] );
@@ -166,8 +168,8 @@ void KNCube::_BuildNet( const Configuration &config )
 	_chan[right_input]->SetLatency( 1 );
       }
       //get the output channel number
-      right_output = _RightChannel( node, dim );
-      left_output  = _LeftChannel( node, dim );
+      right_output = find_RightChannel( node, 0, dim );
+      left_output  = find_LeftChannel( node, 0, dim );
       
       //add the output channel
       _routers[node]->AddOutputChannel( _chan[right_output], _chan_cred[right_output] );
@@ -195,43 +197,49 @@ void KNCube::_BuildNet( const Configuration &config )
     }
     //配置交换机的输入输出链路
     else{
-	  
+    _routers[node] = Router::NewRouter( config, this, router_name.str( ), 
+					node, 2*2+ 1, 2*2 + 1 );
+    _timed_modules.push_back(_routers[node]);
+
+    router_name.str("");
     }
   }
  
 }
 
 
-int HammingMesh::_LeftChannel( int node, int other_node, int dim )
+int HammingMesh::find_LeftChannel( int node, int other_node, int dim )
 {
   if(other_node<_num_routers){
   // The base channel for a node is 2*_n*node
   int base = 2*2*node;
   // The offset for a left channel is 2*dim + 1
   int off  = 2*dim + 1;
-  
   return ( base + off );
-  
   }
-  else{
-  for(auto &pair:switch_to_channels){
-      for(int num:pair.second ){
-	      if(num)
-      } 
-   }
-  }
+  else{  //说明是找行 or 列交换机的输出通道
+         //查表找dim维度的交换机（0-行 1-列）的输出通道
+	  my_channels=Search_SOC(node);
+	  return my_channels[dim];
+  } 
 }
+  
 
-int HammingMesh::_RightChannel( int node, int other_node, int dim )
+
+int HammingMesh::find_RightChannel( int node, int other_node, int dim )
 {
+  std::vector<int> my_channels(2,0);
   if(other_node<_num_routers){
   // The base channel for a node is 2*_n*node
   int base = 2*2*node;
   // The offset for a right channel is 2*dim 
   int off  = 2*dim;
   return ( base + off );
-  }else{
-	  //查表找对应通道
+  }else{  //说明是找行（0） or 列（1）交换机的输出通道
+	  //查表找dim维度的交换机（0-行 1-列）的输出通道
+	  my_channels=Search_SOC(node);
+	  return my_channels[dim];
+	  
   }
 }
 
@@ -330,11 +338,14 @@ return right_node;
 
 //路由器找左节点的函数
 int HammingMesh::find_LeftNode( int node, int dim )  {
+std::vector<int> my_switches(2,0);
 if(dim==0){
 	if( location[0]>0){
 	    left_node=node-1;
 	}else{
-	    //查表返回（行）交换机	
+	    //查表返回（行）交换机
+		my_switches=Search_STR(node);
+		left_node=my_switches[0];
 	}
     }
 if(dim==1){
@@ -342,6 +353,8 @@ if(dim==1){
 	    left_node=node+_dim_size[1]	  
 	}else{
 	    //查表返回（列）交换机
+		my_switches=Search_STR(node);
+		left_node=my_switches[1];
 	}
 return left_node;	
 }
@@ -352,7 +365,9 @@ if(dim==0){
 	if( location[0]<_dim_size[1]-1){
 	    right_node=node+1;
 	}else{
-	    //查表返回（行）交换机	
+	    //查表返回（行）交换机
+	        my_switches=Search_STR(node);
+		right_node=my_switches[0];
 	}
     }
 if(dim==1){
@@ -360,15 +375,50 @@ if(dim==1){
 	    right_node=node-_dim_size[1]	  
 	}else{
 	    //查表返回（列交换机）
+		my_switches=Search_STR(node);
+		right_node=my_switches[1];
 	}
 return right_node;	
 }
 
-//查表switch_to_routers，用于返回路由器的行或者列交换机
-int HammingMesh::Search_STR(int node){
-	for (auto pair:switch_){
-		
+//查表switch_to_routers，返回当前路由器的行或者列交换机(至少有1个)
+std::vector<int> HammingMesh::Search_STR(int node){
+	std::vector<int> my_switches(2,0);
+	int flag=0；
+	for (auto pair:switch_to_routers){
+	    for (auto num:pair.second){
+		if(num==node){
+		    if(pair.first<_num_routers+_x){
+			my_switches[0]=pair.first;   
+		    }else{
+			my_switches[1]=pair.first;
+		    }
+		}
+	     }
 	}
+	return my_switches;
+}
+
+//查找switch_input_channels,返回当前路由器连接行或者列交换机的输入通道（至少1条）
+std::vector<int> HammingMesh::Search_SIC(int node){
+	std::vector<int> my_channels(2,0);
+	for (auto pair:switch_input_channels){
+	    for (auto v:pair.second){
+		    if(v[0]==node){
+		      if(pair.first<_num_routers+_x){
+			my_channels[0]=pair.first;   
+		      }else{
+			my_channels[1]=pair.first;
+		    }  
+		}
+	    }
+	}
+	return my_channels;
+}
+
+//查找switch_output_channels,返回当前路由器连接行或者列交换机的输出通道（至少1条）
+std::vector<int> HammingMesh::Search_SOC(int node){
+	
 }
 
 void HammingMesh::_IdToLocation(int run_id, vector<int>& location) {
