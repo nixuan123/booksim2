@@ -206,14 +206,14 @@ void KNCube::_BuildNet( const Configuration &config )
     s_input=switch_input_channels[node];
     for(auto num:s_input){
        //add the input vector of numbers
-       _routers[node]->AddInputChannel( _chan[v[1]], _chan_cred[v[1]] );
+       _routers[node]->AddInputChannel( _chan[num[1]], _chan_cred[num[1]] );
        //set input channel latency
        if(use_noc_latency){
-	_chan[v[1]]->SetLatency( latency );
-	_chan_cred[v[1]]->SetLatency( latency );
+	_chan[num[1]]->SetLatency( latency );
+	_chan_cred[num[1]]->SetLatency( latency );
       } else {
-	_chan[v[1]]->SetLatency( 1 );
-	_chan_cred[v[1]]->SetLatency( 1 );
+	_chan[num[1]]->SetLatency( 1 );
+	_chan_cred[num[1]]->SetLatency( 1 );
       }	    
      }
     
@@ -221,14 +221,14 @@ void KNCube::_BuildNet( const Configuration &config )
     s_output=switch_output_channels[node];
     for(auto num:s_output){
        //add the output vector of numbers
-       _routers[node]->AddInputChannel( _chan[v[1]], _chan_cred[v[1]] );
+       _routers[node]->AddInputChannel( _chan[num[1]], _chan_cred[num[1]] );
        //set input channel latency
        if(use_noc_latency){
-	_chan[v[1]]->SetLatency( latency );
-	_chan_cred[v[1]]->SetLatency( latency );
+	_chan[num[1]]->SetLatency( latency );
+	_chan_cred[num[1]]->SetLatency( latency );
       } else {
-	_chan[v[1]]->SetLatency( 1 );
-	_chan_cred[v[1]]->SetLatency( 1 );
+	_chan[num[1]]->SetLatency( 1 );
+	_chan_cred[num[1]]->SetLatency( 1 );
       }	    
      }
     }
