@@ -82,7 +82,7 @@ void HammingMesh::_ComputeSize( const Configuration &config )
 }
 
 void HammingMesh::RegisterRoutingFunctions() {
-
+      gRoutingFunctionMap["min_hammingmesh"]=&min_hammingmesh;
 }
 
 void KNCube::_BuildNet( const Configuration &config )
@@ -437,9 +437,9 @@ std::vector<int> HammingMesh::Search_SIC(int node){
 	    for (auto v:pair.second){
 		    if(v[0]==node){
 		      if(pair.first<_num_routers+_x){
-			my_channels[0]=pair.first;   
+			my_channels[0]=v[1];   
 		      }else{
-			my_channels[1]=pair.first;
+			my_channels[1]=v[1];
 		    }  
 		}
 	    }
@@ -449,7 +449,19 @@ std::vector<int> HammingMesh::Search_SIC(int node){
 
 //查找switch_output_channels,返回当前路由器连接行或者列交换机的输出通道（至少1条）
 std::vector<int> HammingMesh::Search_SOC(int node){
-	
+	std::vector<int> my_channels(2,0);
+	for (auto pair:switch_input_channels){
+	    for (auto v:pair.second){
+		    if(v[0]==node){
+		      if(pair.first<_num_routers+_x){
+			my_channels[0]=v[1];   
+		      }else{
+			my_channels[1]=v[1];
+		    }  
+		}
+	    }
+	}
+	return my_channels;
 }
 
 void HammingMesh::_IdToLocation(int run_id, vector<int>& location) {
