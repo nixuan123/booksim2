@@ -112,6 +112,9 @@ Network * Network::New(const Configuration & config, const string & name)
   } else if ( topo == "dragonflynew"){
     DragonFlyNew::RegisterRoutingFunctions() ;
     n = new DragonFlyNew(config, name);
+  } else if ( topo == "hammingmesh"){//新增
+    HammingMesh::RegisterRoutingFunctions() ;
+    n = new HammingMesh(config, name);
   } else {
     cerr << "Unknown topology: " << topo << endl;
   }
