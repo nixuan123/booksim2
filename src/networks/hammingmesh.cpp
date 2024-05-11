@@ -77,6 +77,8 @@ void HammingMesh::_ComputeSize( const Configuration &config )
 
   //整个拓扑通道的数量,路由器的通道数加上行列交换机的通道数
   _channels = 2*2*_num_routers+(2*_a*_y)*_x+(2*_b*_x)*_y;
+  //整个拓扑中节点的数量
+  _size= _num_routers+_num_switches;
 
   _nodes = _num_routers+_num_switches;
 }
@@ -568,7 +570,25 @@ std::vector<int> HammingMesh::_EdgeRouterGetSwitchIds(int rtr_id){
 return my_switches;
 }
 
+//对于一组特定的router，flit和input channel,需要提供一个output port和out VC用于路由
+int hammingmesh_port(int rID, int src, int dest){
+   int dest_router;
+   int out_port;
+   //如果是在当前路由器下
+   if(rID==dest_router){
+	out_port = dest
+   }
+   //如果是在其他路由器下
+   else{
+      if(dest_router < rID){
+	//查表找端口
+	out_port=
+      }
+   }
+}
+
 //min_hammingmesh函数进行路由
+//用于在hammingmesh网络拓扑中计算数据包（通常称为“flit”）的下一个输出端口（out_port）
 void min_hammingmesh(Router *r,Flit *f,int in_channel,OutputSet *outputs,bool inject){
   int debug = f->watch;
   outputs->Clear();
