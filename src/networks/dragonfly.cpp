@@ -40,17 +40,18 @@
 int gP, gA, gG;
 
 //calculate the hop count between src and estination
+//计算源节点和目的节点之间的跳数
 int dragonflynew_hopcnt(int src, int dest) 
 {
-  int hopcnt;
-  int dest_grp_ID, src_grp_ID; 
+  int hopcnt;//设置跳数变量
+  int dest_grp_ID, src_grp_ID;//设置目的组id和源组id 
   int src_hopcnt, dest_hopcnt;
   int src_intm, dest_intm;
-  int grp_output, dest_grp_output;
-  int grp_output_RID;
+  int grp_output, dest_grp_output;//源组输出端口和目的组输出端口
+  int grp_output_RID;//源组输出端口所在的路由器id
 
-  int _grp_num_routers= gA;
-  int _grp_num_nodes =_grp_num_routers*gP;
+  int _grp_num_routers= gA;//将gA变量赋值给每组的路由器/交换机数量
+  int _grp_num_nodes =_grp_num_routers*gP;//每组的终端数量。gP代表每个路由器/交换机上所连接的终端数量
   
   dest_grp_ID = int(dest/_grp_num_nodes);
   src_grp_ID = int(src / _grp_num_nodes);
@@ -102,36 +103,45 @@ int dragonflynew_hopcnt(int src, int dest)
 
 
 //packet output port based on the source, destination and current location
+//根据源节点、目的节点和当前位置确定数据包的输出端口
 int dragonfly_port(int rID, int source, int dest){
-  int _grp_num_routers= gA;
-  int _grp_num_nodes =_grp_num_routers*gP;
+  int _grp_num_routers= gA;//计算出每个组内的路由器数量，我们现在考虑_grp_num_routers=a=2的情况，即组内只存在两个交换机
+  int _grp_num_nodes =_grp_num_routers*gP;//gP是每个路由器的终端数，由于a=1，所以gP=1
 
   int out_port = -1;
-  int grp_ID = int(rID / _grp_num_routers); 
-  int dest_grp_ID = int(dest/_grp_num_nodes);
+  int grp_ID = int(rID / _grp_num_routers);//计算出当前路由器的组id，假设当前路由器id=0，那么其组id=grp_id=0
+  int dest_grp_ID = int(dest/_grp_num_nodes);//计算出目的路由器的组id，假设要去往的目的路由器id=4，那么其组id=dest_grp_id=2
   int grp_output=-1;
   int grp_RID=-1;
   
   //which router within this group the packet needs to go to
+  //数据包需要去往该组内的哪个路由器
+  //如果目的路由器的组id和当前路由器的组id一致
   if (dest_grp_ID == grp_ID) {
+    //计算目的节点的id并将其赋值给grp_RID变量
     grp_RID = int(dest / gP);
-  } else {
+  } else {//如果不一致：1、若当前路由器所在的组id大于目的路由器的组id
     if (grp_ID > dest_grp_ID) {
+      //将目的路由器的组id赋值给grp_output变量
       grp_output = dest_grp_ID;
     } else {
+      //2、若当前路由器所在的组id小于目的路由器的组id
+      //将目的路由器的组id-1再赋值给grp_output变量
       grp_output = dest_grp_ID - 1;
     }
     grp_RID = int(grp_output /gP) + grp_ID * _grp_num_routers;
   }
 
-  //At the last hop
-  if (dest >= rID*gP && dest < (rID+1)*gP) {    
+  //At the last hop，在最后一跳（组内），如果目的终端编号大于当前组内的起始终端id
+  //小于下一个组内的起始终端id
+  if (dest >= rID*gP && dest < (rID+1)*gP) {
+    //输出端口为dest对gP取余
     out_port = dest%gP;
-  } else if (grp_RID == rID) {
+  } else if (grp_RID == rID) {//如果grp_RID等于当前路由器的id
     //At the optical link
     out_port = gP + (gA-1) + grp_output %(gP);
   } else {
-    //need to route within a group
+    //need to route within a group,需要在组内进行路由
     assert(grp_RID!=-1);
 
     if (rID < grp_RID){
@@ -142,6 +152,7 @@ int dragonfly_port(int rID, int source, int dest){
   }  
  
   assert(out_port!=-1);
+  //返回数据包的输出端口
   return out_port;
 }
 
@@ -158,22 +169,22 @@ DragonFlyNew::DragonFlyNew( const Configuration &config, const string & name ) :
 void DragonFlyNew::_ComputeSize( const Configuration &config )
 {
 
-  // LIMITATION
-  //  -- only one dimension between the group
-  // _n == # of dimensions within a group
-  // _p == # of processors within a router
-  // inter-group ports : _p
-  // terminal ports : _p
-  // intra-group ports : 2*_p - 1
-  _p = config.GetInt( "k" );	// # of ports in each switch
+  // LIMITATION，先考虑p，a，h，g=(1,2,1,3)的dragonfly拓扑
+  //  -- only one dimension between the group//组与组之间只有一个维度
+  // _n == # of dimensions within a group//组内的维度系数,默认为1
+  // _p == # of processors within a router//路由器内的处理器数量，现取1
+  // inter-group ports : _p//组件端口，1
+  // terminal ports : _p//每个路由器连接终端的端口数量，1
+  // intra-group ports : 2*_p - 1//组内端口，1
+  _p = config.GetInt( "k" );	// # of ports in each switch//每个交换机的端口数，1
   _n = config.GetInt( "n" );
 
 
-  assert(_n==1);
+  assert(_n==1);//确保_n的值为1，保证维度为1
   // dimension
 
   if (_n == 1)
-    _k = _p + _p + 2*_p  - 1;
+    _k = _p + _p + 2*_p  - 1;//1+1+2-1=3，代表每个路由器/交换机连接的端口数
   else
     _k = _p + _p + 2*_p;
 
@@ -182,25 +193,25 @@ void DragonFlyNew::_ComputeSize( const Configuration &config )
   gK = _p; gN = _n;
 
   // with 1 dimension, total of 2p routers per group
-  // N = 2p * p * (2p^2 + 1)
-  // a = # of routers per group
-  //   = 2p (if n = 1)
+  // N = 2p * p * (2p^2 + 1)//N=2*1*3=6,代表整个dragonfly拓扑的路由器/交换机的数量
+  // a = # of routers per group//每个组包含的路由器数量
+  //   = 2p (if n = 1)//=2
   //   = p^(n) (if n > 2)
-  //  g = # of groups
-  //    = a * p + 1
-  // N = a * p * g;
+  //  g = # of groups//拓扑中组的数量
+  //    = a * p + 1//2*1+1=3，即3组
+  // N = a * p * g;//N=2*1*3=6
   
   if (_n == 1)
-    _a = 2 * _p;
+    _a = 2 * _p;//_a=2,每个组内的路由器数量
   else
     _a = powi(_p, _n);
 
-  _g = _a * _p + 1;
-  _nodes   = _a * _p * _g;
+  _g = _a * _p + 1;//2*1+1=3,"ah+1",表示整个拓扑的组数量
+  _nodes   = _a * _p * _g;//2*1*3=6，表示整个拓扑的终端的数量
 
-  _num_of_switch = _nodes / _p;
-  _channels = _num_of_switch * (_k - _p); 
-  _size = _num_of_switch;
+  _num_of_switch = _nodes / _p;//6/1=6，表示整个拓扑的交换机/路由器的数量，等于拓扑中的终端数量除以每个路由器连接的终端数_p。
+  _channels = _num_of_switch * (_k - _p); //通道数量6*（3-1）=12，每个路由器都有输入输出通道
+  _size = _num_of_switch;//拓扑的大小（表示整个拓扑中的交换机/路由器数量）
 
 
   
@@ -422,7 +433,7 @@ void min_dragonflynew( const Router *r, const Flit *f, int in_channel,
 
   int dest  = f->dest;
   int rID =  r->GetID(); 
-
+  //求出路由器所在的组ID
   int grp_ID = int(rID / _grp_num_routers); 
   int debug = f->watch;
   int out_port = -1;
@@ -455,12 +466,15 @@ void min_dragonflynew( const Router *r, const Flit *f, int in_channel,
 
 
 //Basic adaptive routign algorithm for the dragonfly
+//dragonfly网路的基本自适应路由算法
 void ugal_dragonflynew( const Router *r, const Flit *f, int in_channel, 
 			OutputSet *outputs, bool inject )
 {
   //need 3 VCs for deadlock freedom
+  //通过设置3条虚拟通道来避免死锁，因为ugal包括非最短和最短路由
 
   assert(gNumVCs==3);
+  //用于存储即将进行输出操作或输出端口的信息
   outputs->Clear( );
   if(inject) {
     int inject_vc= RandomInt(gNumVCs-1);
@@ -470,49 +484,60 @@ void ugal_dragonflynew( const Router *r, const Flit *f, int in_channel,
   
   //this constant biases the adaptive decision toward minimum routing
   //negative value woudl biases it towards nonminimum routing
+  //下面这个参数会影响自适应路由算法的决策过程，使其倾向于选择最短路径进行数据包的路由，最短路径
+  //通常指的是经过最少数量跳点的路径，如果这个值是负值，那么路由算法的决策过程
   int adaptive_threshold = 30;
-
+  //计算每个组内路由器的数量
   int _grp_num_routers= gA;
-  int _grp_num_nodes =_grp_num_routers*gP;
-  int _network_size =  gA * gP * gG;
+  //计算每个组内终端的数量
+  int _grp_num_nodes =_grp_num_routers*gP;//gP指的是每个路由器所连接的终端数量
+  //整个网络拓扑的终端数
+  int _network_size =  gA * gP * gG;//gG是指整个拓扑的组数
 
- 
+  //获取目的路由器的id
   int dest  = f->dest;
-  int rID =  r->GetID(); 
+  //获取当前路由器的id
+  int rID =  r->GetID();
+  //计算当前路由器的组id
   int grp_ID = (int) (rID / _grp_num_routers);
+  //计算目的路由器的组id
   int dest_grp_ID = int(dest/_grp_num_nodes);
 
   int debug = f->watch;
   int out_port = -1;
   int out_vc = 0;
-  int min_queue_size;
-  int nonmin_queue_size;
+  int min_queue_size;//设置最短路径队列的size
+  int nonmin_queue_size;//设置非最短路径队列的size
   int intm_grp_ID;
   int intm_rID;
-
+  //查看路由器有没有损坏
   if(debug){
     cout<<"At router "<<rID<<endl;
   }
   int min_router_output, nonmin_router_output;
   
   //at the source router, make the adaptive routing decision
+  //在源路由器进行自适应路由决策
   if ( in_channel < gP )   {
     //dest are in the same group, only use minimum routing
+    //目的节点和源节点在同一个组，使用最短路径路由
     if (dest_grp_ID == grp_ID) {
       f->ph = 2;
-    } else {
+    } else {//否则是非最短路径路由，随机选择一个节点
       //select a random node
-      f->intm =RandomInt(_network_size - 1);
-      intm_grp_ID = (int)(f->intm/_grp_num_nodes);
+      f->intm =RandomInt(_network_size - 1);//随机选择中间板上的节点id
+      intm_grp_ID = (int)(f->intm/_grp_num_nodes);//计算出中间板的组id
       if (debug){
 	cout<<"Intermediate node "<<f->intm<<" grp id "<<intm_grp_ID<<endl;
       }
       
       //random intermediate are in the same group, use minimum routing
+      //随机选择的中间节点和当前节点位于同一个组内，使用最短路径路由
       if(grp_ID == intm_grp_ID){
 	f->ph = 1;
       } else {
 	//congestion metrics using queue length, obtained by GetUsedCredit()
+	//使用队列长度的拥塞度量指标，通过GetUsedCredit()获得
 	min_router_output = dragonfly_port(rID, f->src, f->dest); 
       	min_queue_size = max(r->GetUsedCredit(min_router_output), 0) ; 
 
