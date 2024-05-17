@@ -86,7 +86,8 @@ void HammingMesh::_ComputeSize( const Configuration &config )
 void HammingMesh::RegisterRoutingFunctions() {
       gRoutingFunctionMap["min_hammingmesh"]=&min_hammingmesh;
 }
-void min_dragonflynew( const Router *r, const Flit *f, int in_channel, 
+
+void min_hammingmesh( const Router *r, const Flit *f, int in_channel, 
 		       OutputSet *outputs, bool inject )
 {
   outputs->Clear( );
