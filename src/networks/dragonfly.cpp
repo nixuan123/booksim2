@@ -184,7 +184,7 @@ void DragonFlyNew::_ComputeSize( const Configuration &config )
   // dimension
 
   if (_n == 1)
-    _k = _p + _p + 2*_p  - 1;//1+1+2-1=3，代表每个路由器/交换机连接的端口数
+    _k = _p + _p + 2*_p  - 1;//1+1+2-1=3，代表每个路由器/交换机连接的端口数，local（组内连接和终端连接）+global
   else
     _k = _p + _p + 2*_p;
 
@@ -215,11 +215,11 @@ void DragonFlyNew::_ComputeSize( const Configuration &config )
 
 
   
-  gG = _g;
-  gP = _p;
-  gA = _a;
+  gG = _g;//表示整个拓扑的组数量，这里为3
+  gP = _p;//表示每个交换机/路由器连接的终端数量
+  gA = _a;//表示每个组内的路由器数量
   _grp_num_routers = gA;
-  _grp_num_nodes =_grp_num_routers*gP;
+  _grp_num_nodes =_grp_num_routers*gP;//计算出dragonfly拓扑中的终端数量
 
 }
 
@@ -245,33 +245,36 @@ void DragonFlyNew::_BuildNet( const Configuration &config )
   cout << " # of groups (_g) = " << _g << endl;
   cout << " # of routers per group (_a) = " << _a << endl;
 
+  //根据拓扑中的节点数量来构建dragonfly拓扑
   for ( int node = 0; node < _num_of_switch; ++node ) {
     // ID of the group
     int grp_ID;
-    grp_ID = (int) (node/_a);
+    grp_ID = (int) (node/_a);//_a代表每个组内的路由器数量，这段代码是为了计算当前路由器id所在的组号，假设id=4，则grp_ID=2
     router_name << "router";
     
     router_name << "_" <<  node ;
-
+    //_k代表每个路由器上的端口数量，包括终端和非终端端口
     _routers[node] = Router::NewRouter( config, this, router_name.str( ), 
 					node, _k, _k );
     _timed_modules.push_back(_routers[node]);
 
     router_name.str("");
-
+    //_p代表终端数，设置本地输入链路
     for ( int cnt = 0; cnt < _p; ++cnt ) {
+      //c=4+0=4
       c = _p * node +  cnt;
       _routers[node]->AddInputChannel( _inject[c], _inject_cred[c] );
 
     }
-
+    //设置本地输出链路
     for ( int cnt = 0; cnt < _p; ++cnt ) {
+      //c=4+0=4
       c = _p * node +  cnt;
       _routers[node]->AddOutputChannel( _eject[c], _eject_cred[c] );
 
     }
 
-    // add OUPUT channels
+    // add OUPUT channels，添加输出通道
     // _k == # of processor per router
     //  need 2*_k routers  --thus, 
     //  2_k-1 outputs channels within group
@@ -284,9 +287,10 @@ void DragonFlyNew::_BuildNet( const Configuration &config )
     //********************************************
     //   connect OUTPUT channels
     //********************************************
-    // add intra-group output channel
+    // add intra-group output channel，添加组内输出通道
     for ( int dim = 0; dim < _n; ++dim ) {
       for ( int cnt = 0; cnt < (2*_p -1); ++cnt ) {
+	//对于id=4的路由器，output=（2*1-1+1）*1*4+（2*1-1）*0+0=8;id=5时，output=10
 	_output = (2*_p-1 + _p) * _n  * node + (2*_p-1) * dim  + cnt;
 
 	_routers[node]->AddOutputChannel( _chan[_output], _chan_cred[_output] );
@@ -299,8 +303,9 @@ void DragonFlyNew::_BuildNet( const Configuration &config )
     }
 
     // add inter-group output channel
-
+    // 添加组间输出通道
     for ( int cnt = 0; cnt < _p; ++cnt ) {
+      // 对于id=4的路由器，_output=2*4+1+0=9;id=5时，_output=11
       _output = (2*_p-1 + _p) * node + (2*_p - 1) + cnt;
 
       //      _chan[_output].global = true;
@@ -311,22 +316,23 @@ void DragonFlyNew::_BuildNet( const Configuration &config )
 #endif
     }
 
-
+    //接下来添加每个路由器的输入链路
     //********************************************
     //   connect INPUT channels
     //********************************************
-    // # of non-local nodes 
-    _num_ports_per_switch = (_k - _p);
+    // # of non-local nodes //非本地节点
+    _num_ports_per_switch = (_k - _p);//3-1=2
 
 
-    // intra-group GROUP channels
+    // intra-group GROUP channels，组内群组通道，来自组内的local link
     for ( int dim = 0; dim < _n; ++dim ) {
-
+      //id=4时，_dim_ID=4/1=4;id=5时，_dim_ID=5
       _dim_ID = ((int) (node / ( powi(_p, dim))));
 
 
 
       // NODE ID withing group
+      //id=4时，该节点在组内的相对位置为：4%2=0;id=5时，此值为：1
       _dim_ID = node % _a;
 
 
@@ -335,14 +341,14 @@ void DragonFlyNew::_BuildNet( const Configuration &config )
       for ( int cnt = 0; cnt < (2*_p-1); ++cnt ) {
 
 	if ( cnt < _dim_ID)  {
-
+         //id=5时，_input=2*2*2-1*2+1*2+0=8
 	  _input = 	grp_ID  * _num_ports_per_switch * _a - 
 	    (_dim_ID - cnt) *  _num_ports_per_switch + 
 	    _dim_ID * _num_ports_per_switch + 
 	    (_dim_ID - 1);
 	}
 	else {
-
+           //id=4时，_input=2*2*2+0*2+(0-0+1)*2+0=10
 	  _input =  grp_ID * _num_ports_per_switch * _a + 
 	    _dim_ID * _num_ports_per_switch + 
 	    (cnt - _dim_ID + 1) * _num_ports_per_switch + 
@@ -362,20 +368,22 @@ void DragonFlyNew::_BuildNet( const Configuration &config )
 
 
     // add INPUT channels -- "optical" channels connecting the groups
+    //添加输入通道，来自其他组的global link
     int grp_output;
 
     for ( int cnt = 0; cnt < _p; ++cnt ) {
       //	   _dim_ID
+      //id=4时，grp_output=0*1+0=0;id=5时，此值为1+0=1
       grp_output = _dim_ID* _p + cnt;
 
       if ( grp_ID > grp_output)   {
-
+        //id=4时，_input = 0+(2-1)*(1)+1+2-1=3;id=5时，_input=1*2*2+1*1+1+1=7
 	_input = (grp_output) * _num_ports_per_switch * _a    +   		// starting point of group
 	  (_num_ports_per_switch - _p) * (int) ((grp_ID - 1) / _p) +      // find the correct router within grp
 	  (_num_ports_per_switch - _p) + 					// add offset within router
 	  grp_ID - 1;	
       } else {
-
+        //2*2*2+0+2-1+0=9
 	_input = (grp_output + 1) * _num_ports_per_switch * _a    + 
 	  (_num_ports_per_switch - _p) * (int) ((grp_ID) / _p) +      // find the correct router within grp
 	  (_num_ports_per_switch - _p) +
