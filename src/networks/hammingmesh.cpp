@@ -86,6 +86,285 @@ void HammingMesh::_ComputeSize( const Configuration &config )
 void HammingMesh::RegisterRoutingFunctions() {
       gRoutingFunctionMap["min_hammingmesh"]=&min_hammingmesh;
 }
+void min_dragonflynew( const Router *r, const Flit *f, int in_channel, 
+		       OutputSet *outputs, bool inject )
+{
+  outputs->Clear( );
+
+  if(inject) {
+    int inject_vc= RandomInt(gNumVCs-1);
+    outputs->AddRange(-1, inject_vc, inject_vc);
+    return;
+  }
+
+  int _grp_num_routers= gA;
+
+  int dest  = f->dest;
+  int rID =  r->GetID(); 
+  //求出路由器所在的组ID
+  int grp_ID = int(rID / _grp_num_routers); 
+  int debug = f->watch;
+  int out_port = -1;
+  int out_vc = 0;
+  int dest_grp_ID=-1;
+
+  if ( in_channel < gP ) {
+    out_vc = 0;
+    f->ph = 0;
+    if (dest_grp_ID == grp_ID) {
+      f->ph = 1;
+    }
+  } 
+
+
+  out_port = dragonfly_port(rID, f->src, dest);
+
+  //optical dateline
+  if (out_port >=gP + (gA-1)) {
+    f->ph = 1;
+  }  
+  
+  out_vc = f->ph;
+  if (debug)
+    *gWatchOut << GetSimTime() << " | " << r->FullName() << " | "
+	       << "	through output port : " << out_port 
+	       << " out vc: " << out_vc << endl;
+  outputs->AddRange( out_port, out_vc, out_vc );
+}
+
+
+//Basic adaptive routign algorithm for the hammingmesh
+//hammingmesh网路的基本自适应路由算法
+void min_hammingmesh( const Router *r, const Flit *f, int in_channel, 
+			OutputSet *outputs, bool inject )
+{
+  //need 3 VCs for deadlock freedom
+  //通过设置3条虚拟通道来避免死锁，因为ugal包括非最短和最短路由
+
+  assert(gNumVCs==3);
+  //用于存储即将进行输出操作或输出端口的信息
+  outputs->Clear( );
+  if(inject) {
+    int inject_vc= RandomInt(gNumVCs-1);
+    outputs->AddRange(-1, inject_vc, inject_vc);
+    return;
+  }
+  
+  //this constant biases the adaptive decision toward minimum routing
+  //negative value woudl biases it towards nonminimum routing
+  //下面这个参数会影响自适应路由算法的决策过程，使其倾向于选择最短路径进行数据包的路由，最短路径
+  //通常指的是经过最少数量跳点的路径，如果这个值是负值，那么路由算法的决策过程
+  int adaptive_threshold = 30;
+  //计算每个组内路由器的数量
+  int _grp_num_routers= gA;
+  //计算每个组内终端的数量
+  int _grp_num_nodes =_grp_num_routers*gP;//gP指的是每个路由器所连接的终端数量
+  //整个网络拓扑的终端数数
+  int _network_size =  gA * gP * gG;//gG是指整个拓扑的组数
+
+  //获取目的路由器的id
+  int dest  = f->dest;
+  //获取当前路由器的id
+  int rID =  r->GetID();
+  //计算当前路由器的组id
+  int grp_ID = (int) (rID / _grp_num_routers);
+  //计算目的路由器的组id
+  int dest_grp_ID = int(dest/_grp_num_nodes);
+
+  int debug = f->watch;
+  int out_port = -1;
+  int out_vc = 0;
+  int min_queue_size;//设置最短路径队列的size
+  int nonmin_queue_size;//设置非最短路径队列的size
+  int intm_grp_ID;
+  int intm_rID;
+  //查看路由器有没有损坏
+  if(debug){
+    cout<<"At router "<<rID<<endl;
+  }
+  int min_router_output, nonmin_router_output;
+  
+  //at the source router, make the adaptive routing decision
+  //在源路由器进行自适应路由决策
+  if ( in_channel < gP )   {
+    //dest are in the same group, only use minimum routing
+    //目的节点和源节点在同一个组，使用最短路径路由
+    if (dest_grp_ID == grp_ID) {
+      f->ph = 2;
+    } else {//否则是非最短路径路由，随机选择一个节点
+      //select a random node
+      f->intm =RandomInt(_network_size - 1);//随机选择中间板上的节点id
+      intm_grp_ID = (int)(f->intm/_grp_num_nodes);//计算出中间板的组id
+      if (debug){
+	cout<<"Intermediate node "<<f->intm<<" grp id "<<intm_grp_ID<<endl;
+      }
+      
+      //random intermediate are in the same group, use minimum routing
+      //随机选择的中间节点和当前节点位于同一个组内，使用最短路径路由
+      if(grp_ID == intm_grp_ID){
+	f->ph = 1;
+      } else {
+	//congestion metrics using queue length, obtained by GetUsedCredit()
+	//使用队列长度的拥塞度量指标，通过GetUsedCredit()获得
+	min_router_output = hammingmesh_port(rID, f->src, f->dest); 
+      	min_queue_size = max(r->GetUsedCredit(min_router_output), 0) ; 
+
+      
+	nonmin_router_output = hammingmesh_port(rID, f->src, f->intm);
+	nonmin_queue_size = max(r->GetUsedCredit(nonmin_router_output), 0);
+
+	//congestion comparison, could use hopcnt instead of 1 and 2
+	if ((1 * min_queue_size ) <= (2 * nonmin_queue_size)+adaptive_threshold ) {	  
+	  if (debug)  cout << " MINIMAL routing " << endl;
+	  f->ph = 1;
+	} else {
+	  f->ph = 0;
+	}
+      }
+    }
+  }
+
+  //transition from nonminimal phase to minimal
+  if(f->ph==0){
+    intm_rID= (int)(f->intm/gP);
+    if( rID == intm_rID){
+      f->ph = 1;
+    }
+  }
+
+  //port assignement based on the phase
+  if(f->ph == 0){
+    out_port = hammingmesh_port(rID, f->src, f->intm);
+  } else if(f->ph == 1){
+    out_port = hammingmesh_port(rID, f->src, f->dest);
+  } else if(f->ph == 2){
+    out_port = hammingmesh_port(rID, f->src, f->dest);
+  } else {
+    assert(false);
+  }
+
+  //optical dateline
+  if (f->ph == 1 && out_port >=gP + (gA-1)) {
+    f->ph = 2;
+  }  
+
+  //vc assignemnt based on phase
+  out_vc = f->ph;
+
+  outputs->AddRange( out_port, out_vc, out_vc );
+}
+
+//计算源节点和目的节点之间的跳数
+int hammingmesh_hopcnt(int src, int dest) 
+{
+  int hopcnt;
+  int dest_grp_ID, src_grp_ID; 
+  int src_hopcnt, dest_hopcnt;
+  int src_intm, dest_intm;
+  int grp_output, dest_grp_output;
+  int grp_output_RID;
+
+  int _grp_num_routers= gA;
+  int _grp_num_nodes =_grp_num_routers*gP;
+  
+  dest_grp_ID = int(dest/_grp_num_nodes);
+  src_grp_ID = int(src / _grp_num_nodes);
+  
+  //source and dest are in the same group, either 0-1 hop
+  if (dest_grp_ID == src_grp_ID) {
+    if ((int)(dest / gP) == (int)(src /gP))
+      hopcnt = 0;
+    else
+      hopcnt = 1;
+    
+  } else {
+    //source and dest are in the same group
+    //find the number of hops in the source group
+    //find the number of hops in the dest group
+    if (src_grp_ID > dest_grp_ID)  {
+      grp_output = dest_grp_ID;
+      dest_grp_output = src_grp_ID - 1;
+    }
+    else {
+      grp_output = dest_grp_ID - 1;
+      dest_grp_output = src_grp_ID;
+    }
+    grp_output_RID = ((int) (grp_output / (gP))) + src_grp_ID * _grp_num_routers;
+    src_intm = grp_output_RID * gP;
+
+    grp_output_RID = ((int) (dest_grp_output / (gP))) + dest_grp_ID * _grp_num_routers;
+    dest_intm = grp_output_RID * gP;
+
+    //hop count in source group
+    if ((int)( src_intm / gP) == (int)( src / gP ) )
+      src_hopcnt = 0;
+    else
+      src_hopcnt = 1; 
+
+    //hop count in destination group
+    if ((int)( dest_intm / gP) == (int)( dest / gP ) ){
+      dest_hopcnt = 0;
+    }else{
+      dest_hopcnt = 1;
+    }
+
+    //tally
+    hopcnt = src_hopcnt + 1 + dest_hopcnt;
+  }
+
+  return hopcnt;  
+}
+int hammingmesh_port(int rID, int source, int dest){
+  int _grp_num_routers= gA;//计算出每个组内的路由器数量
+  int _grp_num_nodes =_grp_num_routers*gP;//gP是每个路由器的终端数
+
+  int out_port = -1;
+  int grp_ID = int(rID / _grp_num_routers);//计算出当前路由器的组id
+  int dest_grp_ID = int(dest/_grp_num_nodes);//计算出目的路由器的组id
+  int grp_output=-1;
+  int grp_RID=-1;
+  
+  //which router within this group the packet needs to go to
+  //数据包需要去往该组内的哪个路由器
+  //如果目的路由器的组id和当前路由器的组id一致
+  if (dest_grp_ID == grp_ID) {
+    //计算目的节点的id并将其赋值给grp_RID变量
+    grp_RID = int(dest / gP);
+  } else {//如果不一致：1、若当前路由器所在的组id大于目的路由器的组id
+    if (grp_ID > dest_grp_ID) {
+      //将目的路由器的组id赋值给grp_output变量
+      grp_output = dest_grp_ID;
+    } else {
+      //2、若当前路由器所在的组id小于目的路由器的组id
+      //将目的路由器的组id-1再赋值给grp_output变量
+      grp_output = dest_grp_ID - 1;
+    }
+    grp_RID = int(grp_output /gP) + grp_ID * _grp_num_routers;
+  }
+
+  //At the last hop，在最后一跳（组内），如果目的终端编号大于当前组内的起始终端id
+  //小于下一个组内的起始终端id
+  if (dest >= rID*gP && dest < (rID+1)*gP) {
+    //输出端口为dest对gP取余
+    out_port = dest%gP;
+  } else if (grp_RID == rID) {//如果grp_RID等于当前路由器的id
+    //At the optical link
+    out_port = gP + (gA-1) + grp_output %(gP);
+  } else {
+    //need to route within a group,需要在组内进行路由
+    assert(grp_RID!=-1);
+
+    if (rID < grp_RID){
+      out_port = (grp_RID % _grp_num_routers) - 1 + gP;
+    }else{
+      out_port = (grp_RID % _grp_num_routers) + gP;
+    }
+  }  
+ 
+  assert(out_port!=-1);
+  //返回数据包的输出端口
+  return out_port;
+}
 
 void KNCube::_BuildNet( const Configuration &config )
 {
