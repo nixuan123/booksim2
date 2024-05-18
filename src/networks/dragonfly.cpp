@@ -53,18 +53,19 @@ int dragonflynew_hopcnt(int src, int dest)
   int _grp_num_routers= gA;//将gA变量赋值给每组的路由器/交换机数量
   int _grp_num_nodes =_grp_num_routers*gP;//每组的终端数量。gP代表每个路由器/交换机上所连接的终端数量
   
-  dest_grp_ID = int(dest/_grp_num_nodes);
+  dest_grp_ID = int(dest/_grp_num_nodes);//int(dest/_grp_num_routers/_p);
   src_grp_ID = int(src / _grp_num_nodes);
   
   //source and dest are in the same group, either 0-1 hop
+  //源节点和目的节点在同一个组内，要么是0跳要么是1跳，自己或者是相邻的另一个节点
   if (dest_grp_ID == src_grp_ID) {
     if ((int)(dest / gP) == (int)(src /gP))
       hopcnt = 0;
     else
       hopcnt = 1;
     
-  } else {
-    //source and dest are in the same group
+  } else {//源和目的节点不在同一个组内
+    //source and dest are not in the same group
     //find the number of hops in the source group
     //find the number of hops in the dest group
     if (src_grp_ID > dest_grp_ID)  {
@@ -106,7 +107,7 @@ int dragonflynew_hopcnt(int src, int dest)
 //根据源节点、目的节点和当前位置确定数据包的输出端口
 int dragonfly_port(int rID, int source, int dest){
   int _grp_num_routers= gA;//计算出每个组内的路由器数量，我们现在考虑_grp_num_routers=a=2的情况，即组内只存在两个交换机
-  int _grp_num_nodes =_grp_num_routers*gP;//gP是每个路由器的终端数，由于a=1，所以gP=1
+  int _grp_num_nodes =_grp_num_routers*gP;//gP是每个路由器的终端数=_p，由于a=1，所以gP=1
 
   int out_port = -1;
   int grp_ID = int(rID / _grp_num_routers);//计算出当前路由器的组id，假设当前路由器id=0，那么其组id=grp_id=0
@@ -115,29 +116,30 @@ int dragonfly_port(int rID, int source, int dest){
   int grp_RID=-1;
   
   //which router within this group the packet needs to go to
-  //数据包需要去往该组内的哪个路由器
+  //假设现在有一个流是0->4的路由器
+  //数据包需要去往当前所在路由器所在组内的哪个路由器
   //如果目的路由器的组id和当前路由器的组id一致
   if (dest_grp_ID == grp_ID) {
-    //计算目的节点的id并将其赋值给grp_RID变量
+    //则去往的目的地是自己组的路由器终端
     grp_RID = int(dest / gP);
-  } else {//如果不一致：1、若当前路由器所在的组id大于目的路由器的组id
+  } else {//如果不一致,说明不是在同一个组：1、若当前路由器所在的组id大于目的路由器的组id
     if (grp_ID > dest_grp_ID) {
-      //将目的路由器的组id赋值给grp_output变量
+      //将目的路由器的组id赋值给输出组变量
       grp_output = dest_grp_ID;
     } else {
-      //2、若当前路由器所在的组id小于目的路由器的组id
-      //将目的路由器的组id-1再赋值给grp_output变量
-      grp_output = dest_grp_ID - 1;
-    }
-    grp_RID = int(grp_output /gP) + grp_ID * _grp_num_routers;
+      //2、若当前路由器所在的组id小于目的路由器的组id，0->4
+      //将目的路由器的组id-1再赋值给输出组变量
+      grp_output = dest_grp_ID - 1;//grp_output=2-1=1
+    } 
+    //统一计算需要发往当前组内的路由器id
+    grp_RID = int(grp_output /gP) + grp_ID * _grp_num_routers;//grp_ID * _grp_num_routers是当前路由器所在组的起始路由器id，grp_output/gP是偏移量,grp_RID=1
   }
 
-  //At the last hop，在最后一跳（组内），如果目的终端编号大于当前组内的起始终端id
-  //小于下一个组内的起始终端id
-  if (dest >= rID*gP && dest < (rID+1)*gP) {
-    //输出端口为dest对gP取余
+  //At the last hop，在路由函数的最后一跳时
+  if (dest >= rID*gP && dest < (rID+1)*gP) {//如果目的终端在当前路由器上
+    //注入的输出端口为dest对gP取余
     out_port = dest%gP;
-  } else if (grp_RID == rID) {//如果grp_RID等于当前路由器的id
+  } else if (grp_RID == rID) {//如果为了到达目的终端要发往的组内id等于当前路由器的id
     //At the optical link
     out_port = gP + (gA-1) + grp_output %(gP);
   } else {
@@ -349,6 +351,7 @@ void DragonFlyNew::_BuildNet( const Configuration &config )
 	}
 	else {
            //id=4时，_input=2*2*2+0*2+(0-0+1)*2+0=10
+	   //id=2时，_input=1*2*2+0*2+(0-0+1)*2+0=6
 	  _input =  grp_ID * _num_ports_per_switch * _a + 
 	    _dim_ID * _num_ports_per_switch + 
 	    (cnt - _dim_ID + 1) * _num_ports_per_switch + 
@@ -439,8 +442,8 @@ void min_dragonflynew( const Router *r, const Flit *f, int in_channel,
 
   int _grp_num_routers= gA;
 
-  int dest  = f->dest;
-  int rID =  r->GetID(); 
+  int dest  = f->dest;//从flit中获取到目的终端
+  int rID =  r->GetID(); //从router中获取到id
   //求出路由器所在的组ID
   int grp_ID = int(rID / _grp_num_routers); 
   int debug = f->watch;
@@ -484,7 +487,7 @@ void ugal_dragonflynew( const Router *r, const Flit *f, int in_channel,
   assert(gNumVCs==3);
   //用于存储即将进行输出操作或输出端口的信息
   outputs->Clear( );
-  if(inject) {
+  if(inject) {//判断是否正在进行数据包的注入
     int inject_vc= RandomInt(gNumVCs-1);
     outputs->AddRange(-1, inject_vc, inject_vc);
     return;
@@ -509,7 +512,7 @@ void ugal_dragonflynew( const Router *r, const Flit *f, int in_channel,
   //计算当前路由器的组id
   int grp_ID = (int) (rID / _grp_num_routers);
   //计算目的路由器的组id
-  int dest_grp_ID = int(dest/_grp_num_nodes);
+  int dest_grp_ID = int(dest/ _grp_num_nodes);
 
   int debug = f->watch;
   int out_port = -1;
