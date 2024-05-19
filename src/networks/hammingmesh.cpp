@@ -98,7 +98,7 @@ void ugal_hammingmesh( const Router *r, const Flit *f, int in_channel,
   assert(gNumVCs==3);
   //用于存储即将进行输出操作或输出端口的信息
   outputs->Clear( );
-  if(inject) {
+  if(inject) {//判断是否正在进行数据包的注入
     int inject_vc= RandomInt(gNumVCs-1);
     outputs->AddRange(-1, inject_vc, inject_vc);
     return;
@@ -109,43 +109,49 @@ void ugal_hammingmesh( const Router *r, const Flit *f, int in_channel,
   //下面这个参数会影响自适应路由算法的决策过程，使其倾向于选择最短路径进行数据包的路由，最短路径
   //通常指的是经过最少数量跳点的路径，如果这个值是负值，那么路由算法的决策过程
   int adaptive_threshold = 30;
-  //计算每个组内路由器的数量
-  int _grp_num_routers= gA;
+  //计算每个hm板内路由器的数量
+  int _hm_num_routers= _a*_b;
   //计算每个组内终端的数量
-  int _grp_num_nodes =_grp_num_routers*gP;//gP指的是每个路由器所连接的终端数量
-  //整个网络拓扑的终端数数
-  int _network_size =  gA * gP * gG;//gG是指整个拓扑的组数
+  int _hm_num_nodes =_hm_num_routers*1;//每个路由器连接的终端数为1
+  //整个网络拓扑的终端数
+  int _network_size =  _hm_num_nodes*_x*_y;//整个网络拓扑的终端数
 
   //获取目的路由器的id
   int dest  = f->dest;
   //获取当前路由器的id
   int rID =  r->GetID();
-  //计算当前路由器的组id
-  int grp_ID = (int) (rID / _grp_num_routers);
-  //计算目的路由器的组id
-  int dest_grp_ID = int(dest/_grp_num_nodes);
+  //计算当前路由器的hm板id
+  int hm_ID = (int) (rID / _grp_hm_routers);
+  //计算目的路由器的hm板id
+  int dest_hm_ID = int(dest/ _grp_hm_nodes);
 
   int debug = f->watch;
   int out_port = -1;
   int out_vc = 0;
   int min_queue_size;//设置最短路径队列的size
   int nonmin_queue_size;//设置非最短路径队列的size
-  int intm_grp_ID;
-  int intm_rID;
+  int intm_hm_ID;
+  int intm_rID;//中间路由器id
   //查看路由器有没有损坏
   if(debug){
     cout<<"At router "<<rID<<endl;
   }
+  //设置了两种路由方式的输出端口，一种是最短的，还有一种是非最短的
   int min_router_output, nonmin_router_output;
   
   //at the source router, make the adaptive routing decision
   //在源路由器进行自适应路由决策
   if ( in_channel < gP )   {
     //dest are in the same group, only use minimum routing
-    //目的节点和源节点在同一个组，使用最短路径路由
-    if (dest_grp_ID == grp_ID) {
-      f->ph = 2;
-    } else {//否则是非最短路径路由，随机选择一个节点
+    //目的节点和源节点在同一个hm板，使用north last路由
+    if (dest_hm_ID == hm_ID) {
+      f->ph = 2;//算当前在哪个路由阶段（ph），然后判断用哪个虚拟通道
+    } else {
+      //1、如果源节点和目标节点在同一行上，它们将在原板上进行自适应路由到最接近目标的边缘（西或东），然后通过交换机路由到最接近目标的目标板端口
+      //2、如果在同一列上与1类似    
+      //3、如果原板和目标板位于不同的行和列上，数据包必须通过一个中间板进行转发，该中间板必须与原版的行相同，并且与目标板的列相同，路径选择是自适应的和最小的，数据包穿过两个交换机，每个维度一个
+      //4、为了保证板内的死锁自由，数据包使用north-last路由进行转发。板间采用增加3个虚拟通道的方式来避免死锁
+      //首先计算出中间板的位置，选择下一个输出端口（输出通道）
       //select a random node
       f->intm =RandomInt(_network_size - 1);//随机选择中间板上的节点id
       intm_grp_ID = (int)(f->intm/_grp_num_nodes);//计算出中间板的组id
@@ -160,11 +166,11 @@ void ugal_hammingmesh( const Router *r, const Flit *f, int in_channel,
       } else {
 	//congestion metrics using queue length, obtained by GetUsedCredit()
 	//使用队列长度的拥塞度量指标，通过GetUsedCredit()获得
-	min_router_output = hammingmesh_port(rID, f->src, f->dest); 
+	min_router_output = dragonfly_port(rID, f->src, f->dest); 
       	min_queue_size = max(r->GetUsedCredit(min_router_output), 0) ; 
 
       
-	nonmin_router_output = hammingmesh_port(rID, f->src, f->intm);
+	nonmin_router_output = dragonfly_port(rID, f->src, f->intm);
 	nonmin_queue_size = max(r->GetUsedCredit(nonmin_router_output), 0);
 
 	//congestion comparison, could use hopcnt instead of 1 and 2
@@ -188,11 +194,11 @@ void ugal_hammingmesh( const Router *r, const Flit *f, int in_channel,
 
   //port assignement based on the phase
   if(f->ph == 0){
-    out_port = hammingmesh_port(rID, f->src, f->intm);
+    out_port = dragonfly_port(rID, f->src, f->intm);
   } else if(f->ph == 1){
-    out_port = hammingmesh_port(rID, f->src, f->dest);
+    out_port = dragonfly_port(rID, f->src, f->dest);
   } else if(f->ph == 2){
-    out_port = hammingmesh_port(rID, f->src, f->dest);
+    out_port = dragonfly_port(rID, f->src, f->dest);
   } else {
     assert(false);
   }
@@ -207,6 +213,7 @@ void ugal_hammingmesh( const Router *r, const Flit *f, int in_channel,
 
   outputs->AddRange( out_port, out_vc, out_vc );
 }
+
 
 //计算数据包的下一个输出端口
 int hammingmesh_port(int rID, int source, int dest){
