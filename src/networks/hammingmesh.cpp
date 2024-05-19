@@ -84,59 +84,12 @@ void HammingMesh::_ComputeSize( const Configuration &config )
 }
 
 void HammingMesh::RegisterRoutingFunctions() {
-      gRoutingFunctionMap["min_hammingmesh"]=&min_hammingmesh;
+      gRoutingFunctionMap["ugal_hammingmesh"]=&min_hammingmesh;
 }
-
-void min_hammingmesh( const Router *r, const Flit *f, int in_channel, 
-		       OutputSet *outputs, bool inject )
-{
-  outputs->Clear( );
-
-  if(inject) {
-    int inject_vc= RandomInt(gNumVCs-1);
-    outputs->AddRange(-1, inject_vc, inject_vc);
-    return;
-  }
-
-  int _grp_num_routers= gA;
-
-  int dest  = f->dest;
-  int rID =  r->GetID(); 
-  //求出路由器所在的组ID
-  int grp_ID = int(rID / _grp_num_routers); 
-  int debug = f->watch;
-  int out_port = -1;
-  int out_vc = 0;
-  int dest_grp_ID=-1;
-
-  if ( in_channel < gP ) {
-    out_vc = 0;
-    f->ph = 0;
-    if (dest_grp_ID == grp_ID) {
-      f->ph = 1;
-    }
-  } 
-
-
-  out_port = dragonfly_port(rID, f->src, dest);
-
-  //optical dateline
-  if (out_port >=gP + (gA-1)) {
-    f->ph = 1;
-  }  
-  
-  out_vc = f->ph;
-  if (debug)
-    *gWatchOut << GetSimTime() << " | " << r->FullName() << " | "
-	       << "	through output port : " << out_port 
-	       << " out vc: " << out_vc << endl;
-  outputs->AddRange( out_port, out_vc, out_vc );
-}
-
 
 //Basic adaptive routign algorithm for the hammingmesh
 //hammingmesh网路的基本自适应路由算法
-void min_hammingmesh( const Router *r, const Flit *f, int in_channel, 
+void ugal_hammingmesh( const Router *r, const Flit *f, int in_channel, 
 			OutputSet *outputs, bool inject )
 {
   //need 3 VCs for deadlock freedom
@@ -253,6 +206,71 @@ void min_hammingmesh( const Router *r, const Flit *f, int in_channel,
   out_vc = f->ph;
 
   outputs->AddRange( out_port, out_vc, out_vc );
+}
+
+//计算数据包的下一个输出端口
+int hammingmesh_port(int rID, int source, int dest){
+  int _hm_num_routers= gA;//计算出每个板子内的路由器数量，我们现在考虑一个(2,2,2,2)的hm
+  int _grp_num_nodes =_grp_num_routers*gP;//gP是每个路由器的终端数=_p，由于a=1，所以gP=1
+
+  int out_port = -1;
+  int grp_ID = int(rID / _grp_num_routers);//计算出当前路由器的组id，假设当前路由器id=0，那么其组id=grp_id=0
+  int dest_grp_ID = int(dest/_grp_num_nodes);//计算出目的路由器的组id，假设要去往的目的路由器id=4，那么其组id=dest_grp_id=2
+  int grp_output=-1;
+  int grp_RID=-1;
+  
+  //which router within this group the packet needs to go to
+  //假设现在有一个流是0->4的路由器
+  //数据包需要去往当前所在路由器所在组内的哪个路由器
+  //如果目的路由器的组id和当前路由器的组id一致
+  if (dest_grp_ID == grp_ID) {
+    //则去往的目的地是自己组的路由器终端
+    grp_RID = int(dest / gP);
+  } else {//如果不一致,说明不是在同一个组：1、若当前路由器所在的组id大于目的路由器的组id
+    if (grp_ID > dest_grp_ID) {
+      //将目的路由器的组id赋值给输出组变量
+      grp_output = dest_grp_ID;
+    } else {
+      //2、若当前路由器所在的组id小于目的路由器的组id，0->4
+      //将目的路由器的组id-1再赋值给输出组变量
+      grp_output = dest_grp_ID - 1;//grp_output=2-1=1
+    } 
+    //统一计算需要发往当前组内的路由器id
+    grp_RID = int(grp_output /gP) + grp_ID * _grp_num_routers;//grp_ID * _grp_num_routers是当前路由器所在组的起始路由器id，grp_output/gP是偏移量,grp_RID=1
+  }
+
+  //At the last hop，在路由函数的最后一跳时
+  if (dest >= rID*gP && dest < (rID+1)*gP) {//如果目的终端在当前路由器上
+    //注入的输出端口为dest对gP取余
+    out_port = dest%gP;
+  } else if (grp_RID == rID) {//如果为了到达目的终端要发往的组内id等于当前路由器的id
+    //At the optical link
+    out_port = gP + (gA-1) + grp_output %(gP);
+  } else {
+    //need to route within a group,需要在组内进行路由
+    assert(grp_RID!=-1);
+
+    if (rID < grp_RID){
+      out_port = (grp_RID % _grp_num_routers) - 1 + gP;
+    }else{
+      out_port = (grp_RID % _grp_num_routers) + gP;
+    }
+  }  
+ 
+  assert(out_port!=-1);
+  //返回数据包的输出端口
+  return out_port;
+}
+
+
+int HammingMesh::GetN( ) const
+{
+  return _n;
+}
+
+int HammingMesh::GetK( ) const
+{
+  return _k;
 }
 
 //计算源节点和目的节点之间的跳数
@@ -862,69 +880,6 @@ return my_switches;
 }
 
 
-int hammingmesh_port(int rID, int source, int dest){
-  int _hm_num_routers= gA;//计算出每个板子内的路由器数量，我们现在考虑一个(2,2,2,2)的hm
-  int _grp_num_nodes =_grp_num_routers*gP;//gP是每个路由器的终端数=_p，由于a=1，所以gP=1
-
-  int out_port = -1;
-  int grp_ID = int(rID / _grp_num_routers);//计算出当前路由器的组id，假设当前路由器id=0，那么其组id=grp_id=0
-  int dest_grp_ID = int(dest/_grp_num_nodes);//计算出目的路由器的组id，假设要去往的目的路由器id=4，那么其组id=dest_grp_id=2
-  int grp_output=-1;
-  int grp_RID=-1;
-  
-  //which router within this group the packet needs to go to
-  //假设现在有一个流是0->4的路由器
-  //数据包需要去往当前所在路由器所在组内的哪个路由器
-  //如果目的路由器的组id和当前路由器的组id一致
-  if (dest_grp_ID == grp_ID) {
-    //则去往的目的地是自己组的路由器终端
-    grp_RID = int(dest / gP);
-  } else {//如果不一致,说明不是在同一个组：1、若当前路由器所在的组id大于目的路由器的组id
-    if (grp_ID > dest_grp_ID) {
-      //将目的路由器的组id赋值给输出组变量
-      grp_output = dest_grp_ID;
-    } else {
-      //2、若当前路由器所在的组id小于目的路由器的组id，0->4
-      //将目的路由器的组id-1再赋值给输出组变量
-      grp_output = dest_grp_ID - 1;//grp_output=2-1=1
-    } 
-    //统一计算需要发往当前组内的路由器id
-    grp_RID = int(grp_output /gP) + grp_ID * _grp_num_routers;//grp_ID * _grp_num_routers是当前路由器所在组的起始路由器id，grp_output/gP是偏移量,grp_RID=1
-  }
-
-  //At the last hop，在路由函数的最后一跳时
-  if (dest >= rID*gP && dest < (rID+1)*gP) {//如果目的终端在当前路由器上
-    //注入的输出端口为dest对gP取余
-    out_port = dest%gP;
-  } else if (grp_RID == rID) {//如果为了到达目的终端要发往的组内id等于当前路由器的id
-    //At the optical link
-    out_port = gP + (gA-1) + grp_output %(gP);
-  } else {
-    //need to route within a group,需要在组内进行路由
-    assert(grp_RID!=-1);
-
-    if (rID < grp_RID){
-      out_port = (grp_RID % _grp_num_routers) - 1 + gP;
-    }else{
-      out_port = (grp_RID % _grp_num_routers) + gP;
-    }
-  }  
- 
-  assert(out_port!=-1);
-  //返回数据包的输出端口
-  return out_port;
-}
-
-
-int HammingMesh::GetN( ) const
-{
-  return _n;
-}
-
-int HammingMesh::GetK( ) const
-{
-  return _k;
-}
 
 /*
   删除了原本的
