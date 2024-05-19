@@ -521,14 +521,19 @@ void KNCube::_BuildNet( const Configuration &config )
 
 int HammingMesh::find_LeftChannel( int node, int other_node, int dim )
 {
-  if(other_node<_num_routers){
+  if(other_node==0){
   // The base channel for a node is 2*_n*node
   int base = 2*2*node;
   // The offset for a left channel is 2*dim + 1
   int off  = 2*dim + 1;
   return ( base + off );
-  }
-  else{  //说明是找行 or 列交换机的输出通道
+  }else if(other_node<_num_routers){
+  // The base channel for a node is 2*_n*other_node
+  int base = 2*2*other_node;
+  // The offset for a left channel is 2*dim + 1
+  int off  = 2*dim + 1;
+  return ( base + off );	  
+  }else{  //说明是找行 or 列交换机的输出通道
          //查表找dim维度的交换机（0-行 1-列）的输出通道
 	  my_channels=Search_SOC(node);
 	  return my_channels[dim];
@@ -540,12 +545,18 @@ int HammingMesh::find_LeftChannel( int node, int other_node, int dim )
 int HammingMesh::find_RightChannel( int node, int other_node, int dim )
 {
   std::vector<int> my_channels(2,0);
-  if(other_node<_num_routers){
+  if(other_node==0){
   // The base channel for a node is 2*_n*node
   int base = 2*2*node;
   // The offset for a right channel is 2*dim 
   int off  = 2*dim;
   return ( base + off );
+  }else if(other_node<_num_routers){
+  // The base channel for a node is 2*_n*other_node
+  int base = 2*2*other_node;
+  // The offset for a right channel is 2*dim 
+  int off  = 2*dim;
+  return ( base + off );  
   }else{  //说明是找行（0） or 列（1）交换机的输出通道
 	  //查表找dim维度的交换机（0-行 1-列）的输出通道
 	  my_channels=Search_SOC(node);
@@ -850,163 +861,75 @@ std::vector<int> HammingMesh::_EdgeRouterGetSwitchIds(int rtr_id){
 return my_switches;
 }
 
-//对于一组特定的router，flit和input channel,需要提供一个output port和out VC用于路由
-int hammingmesh_port(int rID, int src, int dest){
-   int dest_router;
-   int out_port;
-   //如果是在当前路由器下
-   if(rID==dest_router){
-	out_port = dest
-   }
-   //如果是在其他路由器下
-   else{
-      if(dest_router < rID){
-	//查表找端口
-	out_port=
-      }
-   }
-}
 
-//min_hammingmesh函数进行路由
-//用于在hammingmesh网络拓扑中计算数据包（通常称为“flit”）的下一个输出端口（out_port）
-void min_hammingmesh(Router *r,Flit *f,int in_channel,OutputSet *outputs,bool inject){
-  int debug = f->watch;
-  outputs->Clear();
-
-  if(inject)
-  {
-      int inject_vc = RandomInt(gNumVCs-1);
-      outputs->AddRange(-1, inject_vc, inject_vc);
-      return;
-  }
-
-  int rID = r->GetID();
+int hammingmesh_port(int rID, int source, int dest){
+  int _hm_num_routers= gA;//计算出每个板子内的路由器数量，我们现在考虑一个(2,2,2,2)的hm
+  int _grp_num_nodes =_grp_num_routers*gP;//gP是每个路由器的终端数=_p，由于a=1，所以gP=1
 
   int out_port = -1;
-  int out_vc = 0;
-
-  if(in_channel < gP_testnet)// source node assign to vc0
-  {
-      out_vc = 0;
+  int grp_ID = int(rID / _grp_num_routers);//计算出当前路由器的组id，假设当前路由器id=0，那么其组id=grp_id=0
+  int dest_grp_ID = int(dest/_grp_num_nodes);//计算出目的路由器的组id，假设要去往的目的路由器id=4，那么其组id=dest_grp_id=2
+  int grp_output=-1;
+  int grp_RID=-1;
+  
+  //which router within this group the packet needs to go to
+  //假设现在有一个流是0->4的路由器
+  //数据包需要去往当前所在路由器所在组内的哪个路由器
+  //如果目的路由器的组id和当前路由器的组id一致
+  if (dest_grp_ID == grp_ID) {
+    //则去往的目的地是自己组的路由器终端
+    grp_RID = int(dest / gP);
+  } else {//如果不一致,说明不是在同一个组：1、若当前路由器所在的组id大于目的路由器的组id
+    if (grp_ID > dest_grp_ID) {
+      //将目的路由器的组id赋值给输出组变量
+      grp_output = dest_grp_ID;
+    } else {
+      //2、若当前路由器所在的组id小于目的路由器的组id，0->4
+      //将目的路由器的组id-1再赋值给输出组变量
+      grp_output = dest_grp_ID - 1;//grp_output=2-1=1
+    } 
+    //统一计算需要发往当前组内的路由器id
+    grp_RID = int(grp_output /gP) + grp_ID * _grp_num_routers;//grp_ID * _grp_num_routers是当前路由器所在组的起始路由器id，grp_output/gP是偏移量,grp_RID=1
   }
-  else// dest node assign it to vc1
-  {
-      out_vc = 1;
-  }
 
-  out_port = testnet_port(rID, f->src, f->dest);
+  //At the last hop，在路由函数的最后一跳时
+  if (dest >= rID*gP && dest < (rID+1)*gP) {//如果目的终端在当前路由器上
+    //注入的输出端口为dest对gP取余
+    out_port = dest%gP;
+  } else if (grp_RID == rID) {//如果为了到达目的终端要发往的组内id等于当前路由器的id
+    //At the optical link
+    out_port = gP + (gA-1) + grp_output %(gP);
+  } else {
+    //need to route within a group,需要在组内进行路由
+    assert(grp_RID!=-1);
 
-  outputs->AddRange(out_port, out_vc, out_vc);
-
-  if(debug)
-  {
-      *gWatchOut << GetSimTime()<<" | "<<r->FullName()<<" | "
-          <<" through output port : "<< out_port
-          <<" out vc: "<< out_vc << endl;
-  }
+    if (rID < grp_RID){
+      out_port = (grp_RID % _grp_num_routers) - 1 + gP;
+    }else{
+      out_port = (grp_RID % _grp_num_routers) + gP;
+    }
+  }  
+ 
+  assert(out_port!=-1);
+  //返回数据包的输出端口
+  return out_port;
 }
 
-int KNCube::GetN( ) const
+
+int HammingMesh::GetN( ) const
 {
   return _n;
 }
 
-int KNCube::GetK( ) const
+int HammingMesh::GetK( ) const
 {
   return _k;
 }
 
-/*legacy, not sure how this fits into the new scheme of things*/
-void HammingMesh::InsertRandomFaults( const Configuration &config )
-{
-  int num_fails = config.GetInt( "link_failures" );
-  
-  if ( _size && num_fails ) {
-    vector<long> save_x;
-    vector<double> save_u;
-    SaveRandomState( save_x, save_u );
-    int fail_seed;
-    if ( config.GetStr( "fail_seed" ) == "time" ) {
-      fail_seed = int( time( NULL ) );
-      cout << "SEED: fail_seed=" << fail_seed << endl;
-    } else {
-      fail_seed = config.GetInt( "fail_seed" );
-    }
-    RandomSeed( fail_seed );
-
-    vector<bool> fail_nodes(_size);
-
-    for ( int i = 0; i < _size; ++i ) {
-      int node = i;
-
-      // edge test
-      bool edge = false;
-      for ( int n = 0; n < _n; ++n ) {
-	if ( ( ( node % _k ) == 0 ) ||
-	     ( ( node % _k ) == _k - 1 ) ) {
-	  edge = true;
-	}
-	node /= _k;
-      }
-
-      if ( edge ) {
-	fail_nodes[i] = true;
-      } else {
-	fail_nodes[i] = false;
-      }
-    }
-
-    for ( int i = 0; i < num_fails; ++i ) {
-      int j = RandomInt( _size - 1 );
-      bool available = false;
-      int node = -1;
-      int chan = -1;
-      int t;
-
-      for ( t = 0; ( t < _size ) && (!available); ++t ) {
-	int node = ( j + t ) % _size;
-       
-	if ( !fail_nodes[node] ) {
-	  // check neighbors
-	  int c = RandomInt( 2*_n - 1 );
-
-	  for ( int n = 0; ( n < 2*_n ) && (!available); ++n ) {
-	    chan = ( n + c ) % 2*_n;
-
-	    if ( chan % 1 ) {
-	      available = fail_nodes[_LeftNode( node, chan/2 )];
-	    } else {
-	      available = fail_nodes[_RightNode( node, chan/2 )];
-	    }
-	  }
-	}
-	
-	if ( !available ) {
-	  cout << "skipping " << node << endl;
-	}
-      }
-
-      if ( t == _size ) {
-	Error( "Could not find another possible fault channel" );
-      }
-
-      assert(node != -1);
-      assert(chan != -1);
-      OutChannelFault( node, chan );
-      fail_nodes[node] = true;
-
-      for ( int n = 0; ( n < _n ) && available ; ++n ) {
-	fail_nodes[_LeftNode( node, n )]  = true;
-	fail_nodes[_RightNode( node, n )] = true;
-      }
-
-      cout << "failure at node " << node << ", channel " 
-	   << chan << endl;
-    }
-
-    RestoreRandomState( save_x, save_u );
-  }
-}
+/*
+  删除了原本的
+  void InsertRandomFaults( const Configuration &config );函数
+*/
 
 double HammingMesh::Capacity( ) const
 {
