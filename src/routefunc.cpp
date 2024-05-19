@@ -400,10 +400,11 @@ void fattree_anca( const Router *r, const Flit *f,
 // ===
 
 int dor_next_mesh( int cur, int dest, bool descending = false );
-
+//路由器自适应路由函数，用于在网络中转发数据包flit，他考虑了虚拟通道的使用，以避免死锁并优化网络流量
 void adaptive_xy_yx_mesh( const Router *r, const Flit *f, 
 		 int in_channel, OutputSet *outputs, bool inject )
-{
+{//该函数接受一个路由器对象r，一个数据包f，输入通道in_channel，输出集outputs，以及一个布尔值inject，只是是否是注入数据包
+  //vcBegin和vcEnd用于定义当前数据包可以使用的虚拟通道范围
   int vcBegin = 0, vcEnd = gNumVCs-1;
   if ( f->type == Flit::READ_REQUEST ) {
     vcBegin = gReadReqBeginVC;
@@ -418,34 +419,40 @@ void adaptive_xy_yx_mesh( const Router *r, const Flit *f,
     vcBegin = gWriteReplyBeginVC;
     vcEnd = gWriteReplyEndVC;
   }
+  //断言数据包的虚拟通道编号f->vc在允许的范围内，或者如果是注入的数据包，inject为true且f->vc<0(f->vc=-1)则不做限制
   assert(((f->vc >= vcBegin) && (f->vc <= vcEnd)) || (inject && (f->vc < 0)));
 
   int out_port;
 
   if(inject) {
-
+    //如果是注入数据包，out_port的值被设置为-1
     out_port = -1;
-
-  } else if(r->GetID() == f->dest) {
+  
+  } else if(r->GetID() == f->dest) {//如果当前路由器是数据包的目的地，out_port的值设置为
 
     // at destination router, we don't need to separate VCs by dim order
+    //不需要按照维度顺序来区分虚拟通道，out_port被设置为一个特殊的值2*gN
     out_port = 2*gN;
 
   } else {
-
+    //如果当前路由器不是数据包的目的地，计算可用的虚拟通道数量availible_vcs，通过(vcEnd-vcBegin+1)/2来实现的，确保每个类别至少分配了2个虚拟通道，以避免xy_yx死锁
     //each class must have at least 2 vcs assigned or else xy_yx will deadlock
     int const available_vcs = (vcEnd - vcBegin + 1) / 2;
     assert(available_vcs > 0);
-    
+
+    //dor_next_mesh函数被用来计算在XY(先X后Y)和YX(先Y后X)路由顺序下的下一个输出端口，参数false和true代表XY和YX路由顺序
     int out_port_xy = dor_next_mesh( r->GetID(), f->dest, false );
     int out_port_yx = dor_next_mesh( r->GetID(), f->dest, true );
 
     // Route order (XY or YX) determined when packet is injected
     //  into the network, adaptively
+    //x_then_y变量用来确定是先沿着X轴路由还是Y轴路由
     bool x_then_y;
+    //如果数据包是通过低于2*gN的输入通道到达的，x_then_y的值由f->vc的值和availiable_vcs的关系确定
     if(in_channel < 2*gN){
       x_then_y =  (f->vc < (vcBegin + available_vcs));
-    } else {
+    } else {//如果数据包是通过高于等于2*gN的输入通道到达的，x_then_y的值由XY和YX方向的信用计数决定，如果XY方向上的信用计数大于YX方向。选择YX路由
+	    //如果XY方向的信用计数小于YX方向，选择XY路由，如果两者相等，则随机选择
       int credit_xy = r->GetUsedCredit(out_port_xy);
       int credit_yx = r->GetUsedCredit(out_port_yx);
       if(credit_xy > credit_yx) {
@@ -456,19 +463,22 @@ void adaptive_xy_yx_mesh( const Router *r, const Flit *f,
 	x_then_y = (RandomInt(1) > 0);
       }
     }
-    
+    //根据x_then_y的值，选择out_port_xy或out_port_yx作为输出端口
     if(x_then_y) {
+      //如果选择XY路由，则vcEnd减去available_vcs，表示使用的是较低编号的虚拟通道
       out_port = out_port_xy;
       vcEnd -= available_vcs;
     } else {
+      //如果选择YX路由，则vcBegin加上available_vcs，表示使用的是较高编号的虚拟通道
       out_port = out_port_yx;
       vcBegin += available_vcs;
     }
 
   }
-
+  //清空outputs集合中的所有元素
   outputs->Clear();
 
+  //将一系列值(虚拟通道)添加到outputs集合中，所有在vcBegin和vcEnd之间的虚拟通道都会被添加到outputs集合中
   outputs->AddRange( out_port , vcBegin, vcEnd );
   
 }
