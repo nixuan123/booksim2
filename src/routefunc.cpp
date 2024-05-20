@@ -546,16 +546,16 @@ void xy_yx_mesh( const Router *r, const Flit *f,
 //=============================================================
 
 //=============================================================
-
+//此函数用于确定在二维网格中，数据包应该向那个方向移动以到达目的地，函数基于dor(Dimension-Order Routing)路由算法
 int dor_next_mesh( int cur, int dest, bool descending )
-{
-  if ( cur == dest ) {
+{//descending表示是否采用降序(从高维到低维)的路由策略
+  if ( cur == dest ) {//数据包到达了目的路由器，弹出到其终端
     return 2*gN;  // Eject
   }
-
+  //用于跟踪当前正在考虑的维度
   int dim_left;
 
-  if(descending) {
+  if(descending) {//降序维序路由DOR
     for ( dim_left = ( gN - 1 ); dim_left > 0; --dim_left ) {
       if ( ( cur * gK / gNodes ) != ( dest * gK / gNodes ) ) { break; }
       cur = (cur * gK) % gNodes; dest = (dest * gK) % gNodes;
