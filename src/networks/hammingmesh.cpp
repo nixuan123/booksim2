@@ -430,7 +430,7 @@ void KNCube::_BuildNet( const Configuration &config )
     router_name << my_location[0] <<my_location[1]<<my_location[2]<<my_location[3];
     
     if(node<_num_routers){
-    //2*_n+1代表路由器的出度和入度
+    //2*_n+1代表路由器的出度和入度，双向通道，输入和输出都是一个端口号
     _routers[node] = Router::NewRouter( config, this, router_name.str( ), 
 					node, 2*2+ 1, 2*2 + 1 );
     _timed_modules.push_back(_routers[node]);
