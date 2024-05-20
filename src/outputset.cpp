@@ -61,13 +61,15 @@ void OutputSet::AddRange( int output_port, int vc_start, int vc_end, int pri )
 }
 
 //legacy support, for performance, just use GetSet()
+//计算并返回指定输出端口的虚拟通道的数量
 int OutputSet::NumVCs( int output_port ) const
 {
   int total = 0;
   set<sSetElement>::const_iterator i = _outputs.begin( );
-  while(i!=_outputs.end( )){
+  //_outputs是一个set容器，存储了类型为sSetElement的元素。i是指向set容器中元素的迭代器
+  while(i!=_outputs.end( )){//如果当前遍历到的sSetElement对象的output_port成员变量与函数参数output_port相等
     if(i->output_port == output_port){
-      total += (i->vc_end - i->vc_start + 1);
+      total += (i->vc_end - i->vc_start + 1);//计算当前sSetElement对象的VC数量
     }
     i++;
   }
