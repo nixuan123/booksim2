@@ -155,7 +155,7 @@ void ugal_hammingmesh( const Router *r, const Flit *f, int in_channel,
       //首先计算出中间板的位置，选择下一个输出端口（输出通道）
       //select a random node
       f->intm =RandomInt(_network_size - 1);//随机选择中间板上的节点id
-      intm_grp_ID = (int)(f->intm/_grp_num_nodes);//计算出中间板的组id
+      intm_hm_ID = (int)(f->intm/_hm_num_nodes);//计算出中间板的组id
       if (debug){
 	cout<<"Intermediate node "<<f->intm<<" grp id "<<intm_grp_ID<<endl;
       }
@@ -219,49 +219,49 @@ void ugal_hammingmesh( const Router *r, const Flit *f, int in_channel,
 //计算数据包的下一个输出端口
 int hammingmesh_port(int rID, int source, int dest){
   int _hm_num_routers= gA;//计算出每个板子内的路由器数量，我们现在考虑一个(2,2,2,2)的hm
-  int _grp_num_nodes =_grp_num_routers*gP;//gP是每个路由器的终端数=_p，由于a=1，所以gP=1
+  int _hm_num_nodes =_hm_num_routers*gP;//gP是每个路由器的终端数=_p，由于a=1，所以gP=1
 
   int out_port = -1;
-  int grp_ID = int(rID / _grp_num_routers);//计算出当前路由器的组id，假设当前路由器id=0，那么其组id=grp_id=0
-  int dest_grp_ID = int(dest/_grp_num_nodes);//计算出目的路由器的组id，假设要去往的目的路由器id=4，那么其组id=dest_grp_id=2
-  int grp_output=-1;
-  int grp_RID=-1;
+  int hm_ID = int(rID / _hm_num_routers);//计算出当前路由器的组id，假设当前路由器id=0，那么其组id=grp_id=0
+  int dest_hm_ID = int(dest/_hm_num_nodes);//计算出目的路由器的组id，假设要去往的目的路由器id=4，那么其组id=dest_grp_id=2
+  int hm_output=-1;
+  int hm_RID=-1;
   
   //which router within this group the packet needs to go to
   //假设现在有一个流是0->4的路由器
   //数据包需要去往当前所在路由器所在组内的哪个路由器
   //如果目的路由器的组id和当前路由器的组id一致
-  if (dest_grp_ID == grp_ID) {
+  if (dest_hm_ID == hm_ID) {
     //则去往的目的地是自己组的路由器终端
-    grp_RID = int(dest / gP);
+    hm_RID = int(dest / gP);
   } else {//如果不一致,说明不是在同一个组：1、若当前路由器所在的组id大于目的路由器的组id
-    if (grp_ID > dest_grp_ID) {
+    if (grp_ID > dest_hm_ID) {
       //将目的路由器的组id赋值给输出组变量
-      grp_output = dest_grp_ID;
+      hm_output = dest_hm_ID;
     } else {
       //2、若当前路由器所在的组id小于目的路由器的组id，0->4
       //将目的路由器的组id-1再赋值给输出组变量
-      grp_output = dest_grp_ID - 1;//grp_output=2-1=1
+      hm_output = dest_hm_ID - 1;//hm_output=2-1=1
     } 
     //统一计算需要发往当前组内的路由器id
-    grp_RID = int(grp_output /gP) + grp_ID * _grp_num_routers;//grp_ID * _grp_num_routers是当前路由器所在组的起始路由器id，grp_output/gP是偏移量,grp_RID=1
+    hm_RID = int(hm_output /gP) + hm_ID * _hm_num_routers;//
   }
 
   //At the last hop，在路由函数的最后一跳时
   if (dest >= rID*gP && dest < (rID+1)*gP) {//如果目的终端在当前路由器上
     //注入的输出端口为dest对gP取余
     out_port = dest%gP;
-  } else if (grp_RID == rID) {//如果为了到达目的终端要发往的组内id等于当前路由器的id
+  } else if (hm_RID == rID) {//如果为了到达目的终端要发往的组内id等于当前路由器的id
     //At the optical link
-    out_port = gP + (gA-1) + grp_output %(gP);
+    out_port = gP + (gA-1) + hm_output %(gP);
   } else {
     //need to route within a group,需要在组内进行路由
-    assert(grp_RID!=-1);
+    assert(hm_RID!=-1);
 
-    if (rID < grp_RID){
-      out_port = (grp_RID % _grp_num_routers) - 1 + gP;
+    if (rID < hm_RID){
+      out_port = (hm_RID % _hm_num_routers) - 1 + gP;
     }else{
-      out_port = (grp_RID % _grp_num_routers) + gP;
+      out_port = (hm_RID % _hm_num_routers) + gP;
     }
   }  
  
@@ -285,20 +285,20 @@ int HammingMesh::GetK( ) const
 int hammingmesh_hopcnt(int src, int dest) 
 {
   int hopcnt;
-  int dest_grp_ID, src_grp_ID; 
+  int dest_hm_ID, src_hm_ID; 
   int src_hopcnt, dest_hopcnt;
   int src_intm, dest_intm;
-  int grp_output, dest_grp_output;
-  int grp_output_RID;
+  int hm_output, dest_hm_output;
+  int hm_output_RID;
 
-  int _grp_num_routers= gA;
-  int _grp_num_nodes =_grp_num_routers*gP;
+  int _hm_num_routers= gA;
+  int _hm_num_nodes =_hm_num_routers*gP;
   
-  dest_grp_ID = int(dest/_grp_num_nodes);
-  src_grp_ID = int(src / _grp_num_nodes);
+  dest_hm_ID = int(dest/_hm_num_nodes);
+  src_hm_ID = int(src / _hm_num_nodes);
   
   //source and dest are in the same group, either 0-1 hop
-  if (dest_grp_ID == src_grp_ID) {
+  if (dest_hm_ID == src_hm_ID) {
     if ((int)(dest / gP) == (int)(src /gP))
       hopcnt = 0;
     else
@@ -308,19 +308,19 @@ int hammingmesh_hopcnt(int src, int dest)
     //source and dest are in the same group
     //find the number of hops in the source group
     //find the number of hops in the dest group
-    if (src_grp_ID > dest_grp_ID)  {
-      grp_output = dest_grp_ID;
-      dest_grp_output = src_grp_ID - 1;
+    if (src_hm_ID > dest_hm_ID)  {
+      hm_output = dest_hm_ID;
+      dest_hm_output = src_hm_ID - 1;
     }
     else {
-      grp_output = dest_grp_ID - 1;
-      dest_grp_output = src_grp_ID;
+      hm_output = dest_hm_ID - 1;
+      dest_hm_output = src_hm_ID;
     }
-    grp_output_RID = ((int) (grp_output / (gP))) + src_grp_ID * _grp_num_routers;
-    src_intm = grp_output_RID * gP;
+    hm_output_RID = ((int) (hm_output / (gP))) + src_hm_ID * _hm_num_routers;
+    src_intm = hm_output_RID * gP;
 
-    grp_output_RID = ((int) (dest_grp_output / (gP))) + dest_grp_ID * _grp_num_routers;
-    dest_intm = grp_output_RID * gP;
+    hm_output_RID = ((int) (dest_hm_output / (gP))) + dest_hm_ID * _hm_num_routers;
+    dest_intm = hm_output_RID * gP;
 
     //hop count in source group
     if ((int)( src_intm / gP) == (int)( src / gP ) )
@@ -341,57 +341,8 @@ int hammingmesh_hopcnt(int src, int dest)
 
   return hopcnt;  
 }
-int hammingmesh_port(int rID, int source, int dest){
-  int _grp_num_routers= gA;//计算出每个组内的路由器数量
-  int _grp_num_nodes =_grp_num_routers*gP;//gP是每个路由器的终端数
 
-  int out_port = -1;
-  int grp_ID = int(rID / _grp_num_routers);//计算出当前路由器的组id
-  int dest_grp_ID = int(dest/_grp_num_nodes);//计算出目的路由器的组id
-  int grp_output=-1;
-  int grp_RID=-1;
-  
-  //which router within this group the packet needs to go to
-  //数据包需要去往该组内的哪个路由器
-  //如果目的路由器的组id和当前路由器的组id一致
-  if (dest_grp_ID == grp_ID) {
-    //计算目的节点的id并将其赋值给grp_RID变量
-    grp_RID = int(dest / gP);
-  } else {//如果不一致：1、若当前路由器所在的组id大于目的路由器的组id
-    if (grp_ID > dest_grp_ID) {
-      //将目的路由器的组id赋值给grp_output变量
-      grp_output = dest_grp_ID;
-    } else {
-      //2、若当前路由器所在的组id小于目的路由器的组id
-      //将目的路由器的组id-1再赋值给grp_output变量
-      grp_output = dest_grp_ID - 1;
-    }
-    grp_RID = int(grp_output /gP) + grp_ID * _grp_num_routers;
-  }
 
-  //At the last hop，在最后一跳（组内），如果目的终端编号大于当前组内的起始终端id
-  //小于下一个组内的起始终端id
-  if (dest >= rID*gP && dest < (rID+1)*gP) {
-    //输出端口为dest对gP取余
-    out_port = dest%gP;
-  } else if (grp_RID == rID) {//如果grp_RID等于当前路由器的id
-    //At the optical link
-    out_port = gP + (gA-1) + grp_output %(gP);
-  } else {
-    //need to route within a group,需要在组内进行路由
-    assert(grp_RID!=-1);
-
-    if (rID < grp_RID){
-      out_port = (grp_RID % _grp_num_routers) - 1 + gP;
-    }else{
-      out_port = (grp_RID % _grp_num_routers) + gP;
-    }
-  }  
- 
-  assert(out_port!=-1);
-  //返回数据包的输出端口
-  return out_port;
-}
 
 void KNCube::_BuildNet( const Configuration &config )
 {
