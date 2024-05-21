@@ -131,7 +131,7 @@ void ugal_hammingmesh( const Router *r, const Flit *f, int in_channel,
   int out_vc = 0;
   int min_queue_size;//设置最短路径队列的size
   int nonmin_queue_size;//设置非最短路径队列的size
-  int intm_hm_ID;
+  int intm_hm_ID;//中间hm板id
   int intm_rID;//中间路由器id
   //查看路由器有没有损坏
   if(debug){
@@ -162,16 +162,16 @@ void ugal_hammingmesh( const Router *r, const Flit *f, int in_channel,
       
       //random intermediate are in the same group, use minimum routing
       //随机选择的中间节点和当前节点位于同一个组内，使用最短路径路由
-      if(grp_ID == intm_grp_ID){
+      if(hm_ID == intm_hm_ID){
 	f->ph = 1;
       } else {
 	//congestion metrics using queue length, obtained by GetUsedCredit()
 	//使用队列长度的拥塞度量指标，通过GetUsedCredit()获得
-	min_router_output = dragonfly_port(rID, f->src, f->dest); 
+	min_router_output = hammingmesh_port(rID, f->src, f->dest); 
       	min_queue_size = max(r->GetUsedCredit(min_router_output), 0) ; 
 
       
-	nonmin_router_output = dragonfly_port(rID, f->src, f->intm);
+	nonmin_router_output = hammingmesh_port(rID, f->src, f->intm);
 	nonmin_queue_size = max(r->GetUsedCredit(nonmin_router_output), 0);
 
 	//congestion comparison, could use hopcnt instead of 1 and 2
@@ -195,11 +195,11 @@ void ugal_hammingmesh( const Router *r, const Flit *f, int in_channel,
 
   //port assignement based on the phase
   if(f->ph == 0){
-    out_port = dragonfly_port(rID, f->src, f->intm);
+    out_port = hammingmesh_port(rID, f->src, f->intm);
   } else if(f->ph == 1){
-    out_port = dragonfly_port(rID, f->src, f->dest);
+    out_port = hammingmesh_port(rID, f->src, f->dest);
   } else if(f->ph == 2){
-    out_port = dragonfly_port(rID, f->src, f->dest);
+    out_port = hammingmesh_port(rID, f->src, f->dest);
   } else {
     assert(false);
   }
