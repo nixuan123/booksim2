@@ -81,7 +81,7 @@ void HammingMesh::_ComputeSize( const Configuration &config )
   _size= _num_routers+_num_switches;
 
   //整个拓扑中终端的数量
-  _nodes = (_num_routers+_num_switches)*1;
+  _nodes = _num_routers*1;
 }
 
 void HammingMesh::RegisterRoutingFunctions() {
