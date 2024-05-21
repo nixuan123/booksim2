@@ -366,7 +366,7 @@ void KNCube::_BuildNet( const Configuration &config )
   use_noc_latency = (config.GetInt("use_noc_latency")==1);
 
   //建表,从路由器0遍历到_num_routers+_num_switches;维度从0->1;行交换机->列交换机;
-  for ( int node = 0; node < _num_routers+_num_switches; ++node ) {
+  for ( int node = 0; node < _num_routers; ++node ) {
 	  for ( int dim = 0; dim < 2; ++dim ) { 
            left_node  = _LeftNode( node, dim );
            right_node = _RightNode( node, dim );
