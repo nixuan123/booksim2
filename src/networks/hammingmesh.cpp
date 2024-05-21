@@ -4,7 +4,7 @@
 #include <sstream>
 #include <ctime>
 #include <cassert>
-#include "kncube.hpp"
+#include "hammingmesh.hpp"
 #include "random_utils.hpp"
 #include "misc_utils.hpp"
  //#include "iq_router.hpp"
@@ -480,7 +480,7 @@ void KNCube::_BuildNet( const Configuration &config )
     s_output=switch_output_channels[node];
     for(auto num:s_output){
        //add the output vector of numbers
-       _routers[node]->AddInputChannel( _chan[num[1]], _chan_cred[num[1]] );
+       _routers[node]->AddOutputChannel( _chan[num[1]], _chan_cred[num[1]] );
        //set input channel latency
        if(use_noc_latency){
 	_chan[num[1]]->SetLatency( latency );
@@ -678,6 +678,7 @@ if(dim==1){
 		right_node=my_switches[1];
 	}
 return right_node;	
+}
 }
 
 //查表switch_to_routers，返回当前路由器的行或者列交换机(至少有1个)
