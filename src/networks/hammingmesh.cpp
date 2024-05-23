@@ -44,6 +44,8 @@ void HammingMesh::_ComputeSize( const Configuration &config )
   _num_routers     = _a*_b*_x*_y;
   //整个拓扑交换机的数量
   _num_switches = _x+_y;
+  //每个路由器的终端数
+  gC=1;
   
   //交换机的起始id
   switch_fid = _dim_size[0] * _dim_size[1] * _dim_size[2] * _dim_size[3];
@@ -221,15 +223,50 @@ void route_hammingmesh( const Router *r, const Flit *f, int in_channel,
   outputs->AddRange( out_port, out_vc, out_vc );
 }
 
+//计算板内数据包的下一个输出端口,板内采用xy路由，传入的参数为当前和目标路由器id
+int hammingmesh_xy_port(int cur_router, int dest_router){
+  const int POSITIVE_X = 0 ;
+  const int NEGATIVE_X = 1 ;
+  const int POSITIVE_Y = 2 ;
+  const int NEGATIVE_Y = 3 ;
+  //计算当前和目的路由器在拓扑中的位置
+  std::vector<int> cur_router_loc;
+  idToLocation(cur_router,cur_loc);
+  std::vector<int> dest_router_loc;
+  idToLocation(dest_router,dest_loc);
+  
 
-//计算数据包的下一个输出端口
-int hammingmesh_port(int rID, int source, int dest){
-  int _hm_num_routers= gA;//计算出每个板子内的路由器数量，我们现在考虑一个(2,2,2,2)的hm
-  int _hm_num_nodes =_hm_num_routers*gP;//gP是每个路由器的终端数=_p，由于a=1，所以gP=1
+   // Dimension-order Routing: x , y
+  if (cur_router_loc[0] < dest_router_loc[0]) {
+    return gC + POSITIVE_X ;
+  }
+  if (cur_router_loc[0] > dest_router_loc[0]) {
+    return gC + NEGATIVE_X ;
+  }
+  if (cur_router_loc[1] < dest_router_loc[1]) {
+    return gC + POSITIVE_Y ;
+  }
+  if (cur_router_loc[1] > dest_router_loc[1]) {
+    return gC + NEGATIVE_Y ;
+  }
+  return 0;
+	
+}
+//计算板间数据包的下一个输出端口,板间采用类似dragongfly的ugal路由,传入的参数为当前路由器id，源终端节点和目的终端节点
+int hammingmesh_ugal_port(int cur_router, int source, int dest){
+  //计算当前和目的路由器在拓扑中的位置
+  std::vector<int> cur_router_loc;
+  idToLocation(cur_router,cur_loc);
+  int dest_router= dest / gC;
+  std::vector<int> dest_router_loc;
+  idToLocation(dest_router,dest_loc);
+  
+  int _hm_num_routers= _dim_size[0]*_dim_size[1];//计算出每个板子内的路由器数量，我们现在考虑一个(2,2,2,2)的hm
+  int _hm_num_nodes =_hm_num_routers*gC;//gC是每个路由器的终端数
 
   int out_port = -1;
   int hm_ID = int(rID / _hm_num_routers);//计算出当前路由器的组id，假设当前路由器id=0，那么其组id=grp_id=0
-  int dest_hm_ID = int(dest/_hm_num_nodes);//计算出目的路由器的组id，假设要去往的目的路由器id=4，那么其组id=dest_grp_id=2
+  int dest_hm_ID = int(dest/ _hm_num_nodes);//计算出目的路由器的组id，假设要去往的目的路由器id=4，那么其组id=dest_grp_id=2
   int hm_output=-1;
   int hm_RID=-1;
   
@@ -378,7 +415,7 @@ void KNCube::_BuildNet( const Configuration &config )
            right_node = _RightNode( node, dim );
           }
   }
-
+  
   //搭建拓扑
   for ( int node = 0; node < _num_routers+_num_switches; ++node ) {
     //将字符串"router"插入到router_name对象中
@@ -393,7 +430,14 @@ void KNCube::_BuildNet( const Configuration &config )
     _timed_modules.push_back(_routers[node]);
 
     router_name.str("");
-
+    
+    //injection and ejection channel, 1 latency, 终端的连接
+    _routers[node]->AddInputChannel( _inject[node], _inject_cred[node] );
+    _routers[node]->AddOutputChannel( _eject[node], _eject_cred[node] );
+    _inject[node]->SetLatency( 1 );
+    _eject[node]->SetLatency( 1 );
+    
+    //switch and router channel, always 1 latency, 路由器和交换机之间的连接
     for ( int dim = 0; dim < 2; ++dim ) {
 
       //find the neighbor 
@@ -454,11 +498,7 @@ void KNCube::_BuildNet( const Configuration &config )
 
       }
     }
-    //injection and ejection channel, always 1 latency, 终端的连接
-    _routers[node]->AddInputChannel( _inject[node], _inject_cred[node] );
-    _routers[node]->AddOutputChannel( _eject[node], _eject_cred[node] );
-    _inject[node]->SetLatency( 1 );
-    _eject[node]->SetLatency( 1 );
+    
     }
     //配置交换机的输入输出链路
     else{
