@@ -85,22 +85,22 @@ void HammingMesh::_ComputeSize( const Configuration &config )
 }
 
 void HammingMesh::RegisterRoutingFunctions() {
-      gRoutingFunctionMap["ugal_hammingmesh"]=&min_hammingmesh;
+      gRoutingFunctionMap["route_hammingmesh"]=&min_hammingmesh;
 }
 
 //Basic adaptive routign algorithm for the hammingmesh
 //hammingmesh网路的基本自适应路由算法
-void ugal_hammingmesh( const Router *r, const Flit *f, int in_channel, 
+void route_hammingmesh( const Router *r, const Flit *f, int in_channel, 
 			OutputSet *outputs, bool inject )
 {
   //need 3 VCs for deadlock freedom
   //通过设置3条虚拟通道来避免死锁，因为ugal包括非最短和最短路由
-
+  
   assert(gNumVCs==3);
   //用于存储即将进行输出操作或输出端口的信息
   outputs->Clear( );
   if(inject) {//判断是否正在进行数据包的注入
-    int inject_vc= RandomInt(gNumVCs-1);
+    int inject_vc= RandomInt(gNumVCs-1);//随机分配给注入通道一个虚拟通道
     outputs->AddRange(-1, inject_vc, inject_vc);
     return;
   }
@@ -117,7 +117,7 @@ void ugal_hammingmesh( const Router *r, const Flit *f, int in_channel,
   //整个网络拓扑的终端数
   int _network_size =  _hm_num_nodes*_x*_y;//整个网络拓扑的终端数
 
-  //获取目的路由器的id
+  //获取目的终端
   int dest  = f->dest;
   //获取当前路由器的id
   int rID =  r->GetID();
@@ -125,6 +125,12 @@ void ugal_hammingmesh( const Router *r, const Flit *f, int in_channel,
   int hm_ID = (int) (rID / _grp_hm_routers);
   //计算目的路由器的hm板id
   int dest_hm_ID = int(dest/ _grp_hm_nodes);
+  //计算当前路由器在拓扑中的位置信息
+  std::vector<int> cur_loc;
+  idToLocation(rID,cur_loc);
+  //计算目的路由器在拓扑中的位置信息
+  std::vector<int> dest_loc;
+  idToLocation(rID,dest_loc);	
 
   int debug = f->watch;
   int out_port = -1;
@@ -147,7 +153,7 @@ void ugal_hammingmesh( const Router *r, const Flit *f, int in_channel,
     //目的节点和源节点在同一个hm板，使用north last路由
     if (dest_hm_ID == hm_ID) {
       f->ph = 2;//算当前在哪个路由阶段（ph），然后判断用哪个虚拟通道
-    } else {
+    } else if(){
       //1、如果源节点和目标节点在同一行上，它们将在原板上进行自适应路由到最接近目标的边缘（西或东），然后通过交换机路由到最接近目标的目标板端口
       //2、如果在同一列上与1类似    
       //3、如果原板和目标板位于不同的行和列上，数据包必须通过一个中间板进行转发，该中间板必须与原版的行相同，并且与目标板的列相同，路径选择是自适应的和最小的，数据包穿过两个交换机，每个维度一个
@@ -733,7 +739,7 @@ std::vector<int> HammingMesh::Search_SOC(int node){
 	return my_channels;
 }
 
-void HammingMesh::_IdToLocation(int run_id, vector<int>& location) {
+void HammingMesh::_IdToLocation(int run_id, std::vector<int>& location) {
     int hm_id = 0;
     int inner_id = 0;
     int num = 0;
