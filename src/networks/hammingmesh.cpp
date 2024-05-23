@@ -87,7 +87,7 @@ void HammingMesh::_ComputeSize( const Configuration &config )
 }
 
 void HammingMesh::RegisterRoutingFunctions() {
-      gRoutingFunctionMap["route_hammingmesh"]=&min_hammingmesh;
+      gRoutingFunctionMap["route_hammingmesh"]=&route_hammingmesh;
 }
 
 //Basic adaptive routign algorithm for the hammingmesh
@@ -139,6 +139,9 @@ void route_hammingmesh( const Router *r, const Flit *f, int in_channel,
   int out_vc = 0;
   int min_queue_size;//设置最短路径队列的size
   int nonmin_queue_size;//设置非最短路径队列的size
+  int cur_edge_router;
+  int intm_edge_router;
+  int dest_edge_router;
   int intm_hm_ID;//中间hm板id
   int intm_rID;//中间路由器id
   //查看路由器有没有损坏
@@ -155,7 +158,16 @@ void route_hammingmesh( const Router *r, const Flit *f, int in_channel,
     //目的节点和源节点在同一个hm板，使用north last路由
     if (dest_hm_ID == hm_ID) {
       f->ph = 2;//算当前在哪个路由阶段（ph），然后判断用哪个虚拟通道
-    } else if(){
+      out_port=hammingmesh_xy_port(rID,dest / gC);
+    } else {//选择一个中间板,intm记录中间板的hm板号
+	std::vector<int> mid_hm_loc;
+        mid_hm_loc=midBoard(cur_loc,dest_loc);
+	intm_hm_ID=mid_hm_loc[1]*_dim_size[3]+mid_loc[0]-1;
+	//随机选择中间板上的对角位置的路由器终端
+	f->intm = intm_hm_ID*_dim_size[0]*_dim_size[1];
+	    if (debug){
+	cout<<"Intermediate node "<<f->intm<<" hm id "<<intm_hm_ID<<endl;
+      }
       //1、如果源节点和目标节点在同一行上，它们将在原板上进行自适应路由到最接近目标的边缘（西或东），然后通过交换机路由到最接近目标的目标板端口
       //2、如果在同一列上与1类似    
       //3、如果原板和目标板位于不同的行和列上，数据包必须通过一个中间板进行转发，该中间板必须与原版的行相同，并且与目标板的列相同，路径选择是自适应的和最小的，数据包穿过两个交换机，每个维度一个
@@ -261,7 +273,7 @@ int hammingmesh_ugal_port(int cur_router, int source, int dest){
   std::vector<int> dest_router_loc;
   idToLocation(dest_router,dest_loc);
   
-  int _hm_num_routers= _dim_size[0]*_dim_size[1];//计算出每个板子内的路由器数量，我们现在考虑一个(2,2,2,2)的hm
+  int _hm_num_routers= _dim_size[0]*_dim_size[1];//计算出每个板子内的路由器数量
   int _hm_num_nodes =_hm_num_routers*gC;//gC是每个路由器的终端数
 
   int out_port = -1;
@@ -824,6 +836,32 @@ void HammingMesh::_IdToLocation(int run_id, std::vector<int>& location) {
             location[i] = run_id;
         }
     }
+}
+
+//判断当前路由器是否为边缘路由器
+bool isEdgeRouter(int rID){
+	std::vector<int> loc;
+	loc=idTolocation(rID,loc);
+	if((loc[0]==0)||(loc[0]==_dim_size[1]-1)||(loc[1]==0)||(loc[1]==_dim_size[0]-1)){
+	   return true;	
+	}
+	return false;
+}
+
+//找寻中间板在拓扑中的位置信息
+std::vector<int> midBoard(vector<int> cur_loc,vector<int> dest_loc ){
+	vector<int> mid_hm_loc;//这个参数记录中间板的hm号
+	if(cur_loc[2]==dest_loc[2]){
+		mid_hm_loc[0]=cur_loc[3];
+		mid_hm_loc[1]=dest_loc[4];
+	}else if(cur_loc[3]==dest_loc[3]){
+		mid_hm_loc[0]=dest_loc[3];
+		mid_hm_loc[1]=cur_loc[4];
+	}else{
+		mid_hm_loc[0]=cur_loc[2];
+		mid_hm_loc[1]=dest_loc[3];
+	}
+	return mid_hm_loc;
 }
 
 std::vector<int> HammingMesh::_EdgeRouterGetSwitchIds(int rtr_id){
