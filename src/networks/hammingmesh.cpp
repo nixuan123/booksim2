@@ -157,16 +157,15 @@ void route_hammingmesh( const Router *r, const Flit *f, int in_channel,
     //dest are in the same group, only use minimum routing
     //目的节点和源节点在同一个hm板，使用north last路由
     if (dest_hm_ID == hm_ID) {
-      f->ph = 2;//算当前在哪个路由阶段（ph），然后判断用哪个虚拟通道
-      out_port=hammingmesh_xy_port(rID,dest / gC);
+      f->ph = 2;//算当前在哪个路由阶段（ph），然后判断用哪个虚拟通道 
     } else {//选择一个中间板,intm记录中间板的hm板号
 	std::vector<int> mid_hm_loc;
         mid_hm_loc=midBoard(cur_loc,dest_loc);
 	intm_hm_ID=mid_hm_loc[1]*_dim_size[3]+mid_loc[0]-1;
 	//随机选择中间板上的对角位置的路由器终端
-	f->intm = intm_hm_ID*_dim_size[0]*_dim_size[1];
-	    if (debug){
-	cout<<"Intermediate node "<<f->intm<<" hm id "<<intm_hm_ID<<endl;
+	f->intm = (intm_hm_ID*_dim_size[0]*_dim_size[1])*1;
+	if (debug){
+	cout<<"Intermediate node "<<f->intm<<" hm_id "<<intm_hm_ID<<endl;
       }
       //1、如果源节点和目标节点在同一行上，它们将在原板上进行自适应路由到最接近目标的边缘（西或东），然后通过交换机路由到最接近目标的目标板端口
       //2、如果在同一列上与1类似    
@@ -174,62 +173,29 @@ void route_hammingmesh( const Router *r, const Flit *f, int in_channel,
       //4、为了保证板内的死锁自由，数据包使用north-last路由进行转发。板间采用增加3个虚拟通道的方式来避免死锁
       //首先计算出中间板的位置，选择下一个输出端口（输出通道）
       //select a random node
-      f->intm =RandomInt(_network_size - 1);//随机选择中间板上的节点id
-      intm_hm_ID = (int)(f->intm/_hm_num_nodes);//计算出中间板的组id
-      if (debug){
-	cout<<"Intermediate node "<<f->intm<<" grp id "<<intm_grp_ID<<endl;
-      }
-      
       //random intermediate are in the same group, use minimum routing
-      //随机选择的中间节点和当前节点位于同一个组内，使用最短路径路由
-      if(hm_ID == intm_hm_ID){
-	f->ph = 1;
-      } else {
-	//congestion metrics using queue length, obtained by GetUsedCredit()
-	//使用队列长度的拥塞度量指标，通过GetUsedCredit()获得
-	min_router_output = hammingmesh_port(rID, f->src, f->dest); 
-      	min_queue_size = max(r->GetUsedCredit(min_router_output), 0) ; 
-
+      //随机选择的中间节点和目的节点位于同一个组内，使用最短路径路由
       
-	nonmin_router_output = hammingmesh_port(rID, f->src, f->intm);
-	nonmin_queue_size = max(r->GetUsedCredit(nonmin_router_output), 0);
-
-	//congestion comparison, could use hopcnt instead of 1 and 2
-	if ((1 * min_queue_size ) <= (2 * nonmin_queue_size)+adaptive_threshold ) {	  
-	  if (debug)  cout << " MINIMAL routing " << endl;
-	  f->ph = 1;
-	} else {
-	  f->ph = 0;
-	}
+      if(dest_hm_ID == intm_hm_ID){//说明目标板和源板在同一行或者同一列
+	f->ph = 1;
+      } else {//否则说明目标板和源板在不同行和不同列
+	f->ph=0;
       }
     }
   }
 
-  //transition from nonminimal phase to minimal
-  if(f->ph==0){
-    intm_rID= (int)(f->intm/gP);
-    if( rID == intm_rID){
-      f->ph = 1;
-    }
-  }
-
-  //port assignement based on the phase
+  //port assignement based on the phase,基于不同的阶段分配端口
   if(f->ph == 0){
-    out_port = hammingmesh_port(rID, f->src, f->intm);
+    out_port = hammingmesh_ugal_port(rID, f->src, f->intm, f->dest);
   } else if(f->ph == 1){
-    out_port = hammingmesh_port(rID, f->src, f->dest);
+    out_port = hammingmesh_ugal_port(rID, f->src, f->intm, f->dest);
   } else if(f->ph == 2){
-    out_port = hammingmesh_port(rID, f->src, f->dest);
+    out_port = hammingmesh_xy_port(rID,dest / gC);
   } else {
     assert(false);
   }
 
-  //optical dateline
-  if (f->ph == 1 && out_port >=gP + (gA-1)) {
-    f->ph = 2;
-  }  
-
-  //vc assignemnt based on phase
+  //vc assignemnt based on phase,基于不同的阶段分配虚拟通道
   out_vc = f->ph;
 
   outputs->AddRange( out_port, out_vc, out_vc );
@@ -265,8 +231,8 @@ int hammingmesh_xy_port(int cur_router, int dest_router){
 	
 }
 //计算板间数据包的下一个输出端口,板间采用类似dragongfly的ugal路由,传入的参数为当前路由器id，源终端节点和目的终端节点
-int hammingmesh_ugal_port(int cur_router, int source, int dest){
-  //计算当前和目的路由器在拓扑中的位置
+int hammingmesh_ugal_port(int cur_router, int source, int intm, int dest){
+  //计算当前、中间和目的路由器在拓扑中的位置
   std::vector<int> cur_router_loc;
   idToLocation(cur_router,cur_loc);
   int dest_router= dest / gC;
@@ -277,16 +243,22 @@ int hammingmesh_ugal_port(int cur_router, int source, int dest){
   int _hm_num_nodes =_hm_num_routers*gC;//gC是每个路由器的终端数
 
   int out_port = -1;
-  int hm_ID = int(rID / _hm_num_routers);//计算出当前路由器的组id，假设当前路由器id=0，那么其组id=grp_id=0
-  int dest_hm_ID = int(dest/ _hm_num_nodes);//计算出目的路由器的组id，假设要去往的目的路由器id=4，那么其组id=dest_grp_id=2
+  int cur_hm_ID = int(rID / _hm_num_routers);//计算出当前路由器的组id
+  int intm_hm_ID = int(intm / _hm_num_nodes);//计算出中间板路由器的组id
+  int dest_hm_ID = int(dest / _hm_num_nodes);//计算出目的路由器的组id
   int hm_output=-1;
   int hm_RID=-1;
   
   //which router within this group the packet needs to go to
   //假设现在有一个流是0->4的路由器
   //数据包需要去往当前所在路由器所在组内的哪个路由器
-  //如果目的路由器的组id和当前路由器的组id一致
-  if (dest_hm_ID == hm_ID) {
+  //如果目的路由器的组id和中间路由器的组id一致
+  if (dest_hm_ID == intm_hm_ID) {//表示中间板和目的板在同一行或者同一列
+    if(cur_router<num_routers){
+	    out_port=hammingmesh_xy_port(cur_router, dest_router);
+    }else{//查表找端口
+	    out_port=
+    }
     //则去往的目的地是自己组的路由器终端
     hm_RID = int(dest / gP);
   } else {//如果不一致,说明不是在同一个组：1、若当前路由器所在的组id大于目的路由器的组id
@@ -616,11 +588,11 @@ int HammingMesh::_LeftNode( int node, int dim )
 		//返回行交换机的id
 		my_switches=_EdgeRouterGetSwitchIds(node);
 		off=2*dim+1;
-		//记录路由器的连接节点和输入通道
-		std::vector<int> value = {node,base+off};
+		//记录路由器的连接节点和输入通道以及输入端口编号
+		std::vector<int> value = {node,base+off,switch_port[my_switches[0]]};
 		switch_input_channels[my_switches[0]].push_back(value);	
-		//记录路由器的连接节点和输出通道
-		std::vector<int> value1 = {node,switch_x_fchannel};
+		//记录路由器的连接节点和输出通道以及输入端口编号
+		std::vector<int> value1 = {node,switch_x_fchannel,switch_port[my_switches[0]]};
 		switch_output_channels[my_switches[0]].push_back(value1);
 		switch_x_fchannel++;
 		left_node=my_switches[0];
@@ -634,10 +606,10 @@ int HammingMesh::_LeftNode( int node, int dim )
 		my_switches=_EdgeRouterGetSwitchIds(node);
 		off=2*dim+1;
 		//记录路由器的连接节点和输入通道
-		std::vector<int> value = {node,base+off};
+		std::vector<int> value = {node,base+off,switch_port[my_switches[1]]};
 		switch_input_channels[my_switches[1]].push_back(value);	
 		//记录路由器的连接节点和输出通道
-		std::vector<int> value1 = {node,switch_x_fchannel};
+		std::vector<int> value1 = {node,switch_x_fchannel,switch_port[my_switches[1]]};
 		switch_output_channels[my_switches[1]].push_back(value1);
 		switch_y_fchannel++; 
 		left_node=my_switches[1];
