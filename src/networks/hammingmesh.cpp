@@ -271,23 +271,50 @@ int hammingmesh_ugal_port(int cur_router, int source, int intm, int dest){
   if (dest_hm_ID == intm_hm_ID) {
 	  if(cur_router_loc[3]==intm_router_loc[3]){//如果两个板子是在同一行
 		  if(cur_router < num_routers){//对于路由器来说
-	               if(cur_hm_ID==source_hm_ID){//如果当前路由器的所在板子是原板
-	               std::vector<int> hmOut_router_loc;//初始化一个板内出口路由器loc
-		       
-		       
+	               if(cur_hm_ID == source_hm_ID){//如果当前路由器的所在板子是原板
+	               int hmOut_router=(source_router_loc[1]+1)*_dim_size[1]-1;
+			   if(hmOut_router=cur_router){
+				out_port=  gC+0;//走行出板路由器的正向端口
+			   }else{
+				out_port=hammingmesh_xy_port(cur_router,hmOut_router);
+			   }       
+		       }else if(cur_hm_ID==intm_hm_ID){//如果当前路由器的所在板子是目标板
+			int hmIn_router=   intm_hm_ID*_hm_num_routers;
+			    if(hmIn_router == dest_router){
+				    //At the last hop
+				    out_port= dest % gC;
+			    }else{
+				 out_port=hammingmesh_xy_port(hmIn_router,dest_router);   
+			    }
 		       }
-		  }else{//说明当前路由器是行列交换机,通过查表找端口
-	    out_port=Search_OutPort_SOC(intm);
-    }
-	    }else if(cur_hm_ID==intm_hm_ID){//如果当前路由器的所在板子是中间板
-		    
-	    }
-    }
+		  }else{//对于行交换机来说,通过查表找端口
+	          out_port=Search_OutPort_SOC(intm_hm_ID*_hm_num_routers);
+                  }
+	    
+          }else if(cur_router_loc[2]==intm_router_loc[2]){//如果两个板子是在同一列
+		  if(cur_router < num_routers){//对于路由器来说
+	               if(cur_hm_ID==dest_hm_ID){//如果当前路由器的所在板子是原板
+	               int hmOut_router=(_dim_size[0]-1)*_dim_size[1]+source_router_loc[0];
+			   if(hmOut_router=cur_router){
+				out_port=gC+3;//走列出板路由器的正向端口
+			   }else{
+				out_port=hammingmesh_xy_port(cur_router,hmOut_router);
+			   }       
+		       }else if(cur_hm_ID==dest_hm_ID){//如果当前路由器的所在板子是目标板
+			int hmIn_router=   intm_hm_ID*_hm_num_routers;
+			    if(hmIn_router == dest_router){
+				    //At the last hop
+				    out_port= dest % gC;
+			    }else{
+				 out_port=hammingmesh_xy_port(hmIn_router,dest_router);   
+			    }       
+		       }
+		  }else{//对于行列交换机来说,通过查表找端口
+	          out_port=Search_OutPort_SOC(intm);
+                  }
 	  }
-    
-    //则去往的目的地是自己组的路由器终端
-    hm_RID = int(dest / gP);
-  } else {//如果不一致,说明不是在同一个组：1、若当前路由器所在的组id大于目的路由器的组id
+  }
+  else {//如果跨越了两个个交换机(三个板子)
     if (grp_ID > dest_hm_ID) {
       //将目的路由器的组id赋值给输出组变量
       hm_output = dest_hm_ID;
@@ -300,29 +327,14 @@ int hammingmesh_ugal_port(int cur_router, int source, int intm, int dest){
     hm_RID = int(hm_output /gP) + hm_ID * _hm_num_routers;//
   }
 
-  //At the last hop，在路由函数的最后一跳时
-  if (dest >= rID*gP && dest < (rID+1)*gP) {//如果目的终端在当前路由器上
-    //注入的输出端口为dest对gP取余
-    out_port = dest%gP;
-  } else if (hm_RID == rID) {//如果为了到达目的终端要发往的组内id等于当前路由器的id
-    //At the optical link
-    out_port = gP + (gA-1) + hm_output %(gP);
-  } else {
-    //need to route within a group,需要在组内进行路由
-    assert(hm_RID!=-1);
-
-    if (rID < hm_RID){
-      out_port = (hm_RID % _hm_num_routers) - 1 + gP;
-    }else{
-      out_port = (hm_RID % _hm_num_routers) + gP;
-    }
-  }  
+  
  
   assert(out_port!=-1);
   //返回数据包的输出端口
   return out_port;
-}
 
+
+} 
 
 int HammingMesh::GetN( ) const
 {
