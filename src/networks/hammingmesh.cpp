@@ -68,7 +68,7 @@ void HammingMesh::_ComputeSize( const Configuration &config )
   //创建一个集合，用于存储交换机映射后的位置
   vector<int> s_loc(4,0);
   for (int i = 0; i < num_switches; ++i) {
-    _IdToLocation(switch_ids[i],s_loc)
+    __IdToLocation(switch_ids[i],s_loc)
     switch_loc.push_back(s_loc);
   }
 
@@ -129,10 +129,10 @@ void route_hammingmesh( const Router *r, const Flit *f, int in_channel,
   int dest_hm_ID = int(dest/ _grp_hm_nodes);
   //计算当前路由器在拓扑中的位置信息
   std::vector<int> cur_loc;
-  idToLocation(rID,cur_loc);
+  _IdToLocation(rID,cur_loc);
   //计算目的路由器在拓扑中的位置信息
   std::vector<int> dest_loc;
-  idToLocation(rID,dest_loc);	
+  _IdToLocation(rID,dest_loc);	
 
   int debug = f->watch;
   int out_port = -1;
@@ -154,8 +154,8 @@ void route_hammingmesh( const Router *r, const Flit *f, int in_channel,
   //at the source router, make the adaptive routing decision
   //在源路由器进行自适应路由决策
   if ( in_channel < gP )   {
-    //dest are in the same group, only use minimum routing
-    //目的节点和源节点在同一个hm板，使用north last路由
+    
+    //目的节点和源节点在同一个hm板，使用xy路由
     if (dest_hm_ID == hm_ID) {
       f->ph = 2;//算当前在哪个路由阶段（ph），然后判断用哪个虚拟通道 
     } else {//选择一个中间板,intm记录中间板的hm板号
@@ -209,9 +209,9 @@ int hammingmesh_xy_port(int cur_router, int dest_router){
   const int NEGATIVE_Y = 3 ;
   //计算当前和目的路由器在拓扑中的位置
   std::vector<int> cur_router_loc;
-  idToLocation(cur_router,cur_loc);
+  _IdToLocation(cur_router,cur_loc);
   std::vector<int> dest_router_loc;
-  idToLocation(dest_router,dest_loc);
+  _IdToLocation(dest_router,dest_loc);
   
 
    // Dimension-order Routing: x , y
@@ -226,23 +226,38 @@ int hammingmesh_xy_port(int cur_router, int dest_router){
   }
   if (cur_router_loc[1] > dest_router_loc[1]) {
     return gC + NEGATIVE_Y ;
+  } 
+  //At the last hop,如果当前路由器已到达目标路由器
+  if((cur_router_loc[0] = dest_router_loc[0])&&(cur_router_loc[1] = dest_router_loc[1])){
+    return dest % gC;
   }
-  return 0;
 	
 }
+
+//能调用这个函数的数据包，至少会跨越一个交换机
 //计算板间数据包的下一个输出端口,板间采用类似dragongfly的ugal路由,传入的参数为当前路由器id，源终端节点和目的终端节点
 int hammingmesh_ugal_port(int cur_router, int source, int intm, int dest){
-  //计算当前、中间和目的路由器在拓扑中的位置
+  //计算源、当前、中间和目的路由器在拓扑中的位置
+  int source_router= source / gC;
+  std::vector<int> source_router_loc;
+  _IdToLocation(source_router,source_router_loc);
+	
   std::vector<int> cur_router_loc;
-  idToLocation(cur_router,cur_loc);
+  _IdToLocation(cur_router,cur_router_loc);
+  
+  int intm_router= intm / gC;
+  std::vector<int> intm_router_loc;
+  _IdToLocation(intm_router,intm_router_loc);
+  
   int dest_router= dest / gC;
   std::vector<int> dest_router_loc;
-  idToLocation(dest_router,dest_loc);
+  _IdToLocation(dest_router,dest_router_loc);
   
   int _hm_num_routers= _dim_size[0]*_dim_size[1];//计算出每个板子内的路由器数量
   int _hm_num_nodes =_hm_num_routers*gC;//gC是每个路由器的终端数
 
   int out_port = -1;
+  int source_hm_ID = int(source / _hm_num_nodes);//计算出当前路由器的组id
   int cur_hm_ID = int(rID / _hm_num_routers);//计算出当前路由器的组id
   int intm_hm_ID = int(intm / _hm_num_nodes);//计算出中间板路由器的组id
   int dest_hm_ID = int(dest / _hm_num_nodes);//计算出目的路由器的组id
@@ -252,13 +267,24 @@ int hammingmesh_ugal_port(int cur_router, int source, int intm, int dest){
   //which router within this group the packet needs to go to
   //假设现在有一个流是0->4的路由器
   //数据包需要去往当前所在路由器所在组内的哪个路由器
-  //如果目的路由器的组id和中间路由器的组id一致
-  if (dest_hm_ID == intm_hm_ID) {//表示中间板和目的板在同一行或者同一列
-    if(cur_router<num_routers){
-	    out_port=hammingmesh_xy_port(cur_router, dest_router);
-    }else{//查表找端口
-	    out_port=
+  //如果只跨越了一个交换机(只有两个板子)
+  if (dest_hm_ID == intm_hm_ID) {
+	  if(cur_router_loc[3]==intm_router_loc[3]){//如果两个板子是在同一行
+		  if(cur_router < num_routers){//对于路由器来说
+	               if(cur_hm_ID==source_hm_ID){//如果当前路由器的所在板子是原板
+	               std::vector<int> hmOut_router_loc;//初始化一个板内出口路由器loc
+		       
+		       
+		       }
+		  }else{//说明当前路由器是行列交换机,通过查表找端口
+	    out_port=Search_OutPort_SOC(intm);
     }
+	    }else if(cur_hm_ID==intm_hm_ID){//如果当前路由器的所在板子是中间板
+		    
+	    }
+    }
+	  }
+    
     //则去往的目的地是自己组的路由器终端
     hm_RID = int(dest / gP);
   } else {//如果不一致,说明不是在同一个组：1、若当前路由器所在的组id大于目的路由器的组id
@@ -404,7 +430,7 @@ void KNCube::_BuildNet( const Configuration &config )
   for ( int node = 0; node < _num_routers+_num_switches; ++node ) {
     //将字符串"router"插入到router_name对象中
     router_name << "router";
-    _IdToLocation(node,my_location);
+    __IdToLocation(node,my_location);
     router_name << my_location[0] <<my_location[1]<<my_location[2]<<my_location[3];
     
     if(node<_num_routers){
@@ -576,7 +602,7 @@ int HammingMesh::find_RightChannel( int node, int other_node, int dim )
 int HammingMesh::_LeftNode( int node, int dim )
 {
   std::vector<int> location(4,0);
-  _IdToLocation(node,location);//比如node=4，现在location=[0,0,1,0] 
+  __IdToLocation(node,location);//比如node=4，现在location=[0,0,1,0] 
   std::vector<int> my_switches(2,0);
   int base = 2*2*node; 
   int off=0;
@@ -623,7 +649,7 @@ return left_node;
 int HammingMesh::_RightNode( int node, int dim )
 {
   std::vector<int> location(4,0);
-  _IdToLocation(node,location);//比如node=4，现在location=[0,0,1,0] 
+  __IdToLocation(node,location);//比如node=4，现在location=[0,0,1,0] 
   int base = 2*2*node; 
   int off=0;
   int right_node=0;
@@ -712,12 +738,12 @@ return right_node;
 }
 
 //查表switch_to_routers，返回当前路由器的行或者列交换机(至少有1个)
-std::vector<int> HammingMesh::Search_STR(int node){
+std::vector<int> HammingMesh::Search_STR(int rID){
 	std::vector<int> my_switches(2,0);
 	int flag=0；
 	for (auto pair:switch_to_routers){
 	    for (auto num:pair.second){
-		if(num==node){
+		if(num==rID){
 		    if(pair.first<_num_routers+_x){
 			my_switches[0]=pair.first;   
 		    }else{
@@ -730,11 +756,11 @@ std::vector<int> HammingMesh::Search_STR(int node){
 }
 
 //查找switch_input_channels,返回当前路由器连接行或者列交换机的输入通道（至少1条）
-std::vector<int> HammingMesh::Search_SIC(int node){
+std::vector<int> HammingMesh::Search_SIC(int rID){
 	std::vector<int> my_channels(2,0);
 	for (auto pair:switch_input_channels){
 	    for (auto v:pair.second){
-		    if(v[0]==node){
+		    if(v[0]==rID){
 		      if(pair.first<_num_routers+_x){
 			my_channels[0]=v[1];   
 		      }else{
@@ -747,11 +773,11 @@ std::vector<int> HammingMesh::Search_SIC(int node){
 }
 
 //查找switch_output_channels,返回当前路由器连接行或者列交换机的输出通道（至少1条）
-std::vector<int> HammingMesh::Search_SOC(int node){
+std::vector<int> HammingMesh::Search_SOC(int rID){
 	std::vector<int> my_channels(2,0);
 	for (auto pair:switch_input_channels){
 	    for (auto v:pair.second){
-		    if(v[0]==node){
+		    if(v[0]==rID){
 		      if(pair.first<_num_routers+_x){
 			my_channels[0]=v[1];   
 		      }else{
@@ -763,7 +789,28 @@ std::vector<int> HammingMesh::Search_SOC(int node){
 	return my_channels;
 }
 
-void HammingMesh::_IdToLocation(int run_id, std::vector<int>& location) {
+
+//查找switch_output_channels,返回当前行/列交换机连接特定路由器的输出端口
+int Hammingmesh::Search_OutPort_SOC(int sID){
+         int out_port;
+	 bool found =false;
+	 for (auto pair:switch_input_channels){
+	    for (auto v:pair.second){
+		    if(v[0]==sID){
+		      out_port=v[3];
+		      found=true;
+		      break;
+		}
+		if (found) break;
+	    }
+	}
+	return out_port;
+	
+}
+
+
+//返回路由器或者交换机在拓扑中的位置
+void HammingMesh::__IdToLocation(int run_id, std::vector<int>& location) {
     int hm_id = 0;
     int inner_id = 0;
     int num = 0;
@@ -813,7 +860,7 @@ void HammingMesh::_IdToLocation(int run_id, std::vector<int>& location) {
 //判断当前路由器是否为边缘路由器
 bool isEdgeRouter(int rID){
 	std::vector<int> loc;
-	loc=idTolocation(rID,loc);
+	loc=_IdToLocation(rID,loc);
 	if((loc[0]==0)||(loc[0]==_dim_size[1]-1)||(loc[1]==0)||(loc[1]==_dim_size[0]-1)){
 	   return true;	
 	}
@@ -841,7 +888,7 @@ std::vector<int> HammingMesh::_EdgeRouterGetSwitchIds(int rtr_id){
         //初始化一个空vector用于保存当前路由器的行列交换机信息
 	std::vector<int> my_switches(2,0);
 	std::vector<int> location(4,0);
-	_IdToLocation(rtr_id,location);
+	__IdToLocation(rtr_id,location);
 	// 判断路由器是否在对角的位置
         if (((loc[0] == 0 && loc[1] == 0) ||
              (loc[0] == _dim_size[1] - 1 && loc[1] == 0) ||
