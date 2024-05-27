@@ -269,7 +269,7 @@ int hammingmesh_ugal_port(int cur_router, int source, int intm, int dest){
   //数据包需要去往当前所在路由器所在组内的哪个路由器
   //如果只跨越了一个交换机(只有两个板子)
   if (dest_hm_ID == intm_hm_ID) {
-	  if(cur_router_loc[3]==intm_router_loc[3]){//如果两个板子是在同一行
+	  if(source_router_loc[3]==intm_router_loc[3]){//如果两个板子是在同一行
 		  if(cur_router < num_routers){//对于路由器来说
 	               if(cur_hm_ID == source_hm_ID){//如果当前路由器的所在板子是原板
 	               int hmOut_router=(source_router_loc[1]+1)*_dim_size[1]-1;
@@ -278,9 +278,9 @@ int hammingmesh_ugal_port(int cur_router, int source, int intm, int dest){
 			   }else{
 				out_port=hammingmesh_xy_port(cur_router,hmOut_router);
 			   }       
-		       }else if(cur_hm_ID==intm_hm_ID){//如果当前路由器的所在板子是目标板
+		       }else if(cur_hm_ID==intm_hm_ID){//如果当前路由器的所在板子是目标板/中间板
 			int hmIn_router=   intm_hm_ID*_hm_num_routers;
-			    if(hmIn_router == dest_router){
+			    if(dest_router == hmIn_router){
 				    //At the last hop
 				    out_port= dest % gC;
 			    }else{
@@ -288,43 +288,65 @@ int hammingmesh_ugal_port(int cur_router, int source, int intm, int dest){
 			    }
 		       }
 		  }else{//对于行交换机来说,通过查表找端口
-	          out_port=Search_OutPort_SOC(intm_hm_ID*_hm_num_routers);
+	          out_port=Search_OutPort_SOC(cur_router, intm_hm_ID*_hm_num_routers);
                   }
 	    
-          }else if(cur_router_loc[2]==intm_router_loc[2]){//如果两个板子是在同一列
+          }else if(source_router_loc[2]==intm_router_loc[2]){//如果两个板子是在同一列
 		  if(cur_router < num_routers){//对于路由器来说
-	               if(cur_hm_ID==dest_hm_ID){//如果当前路由器的所在板子是原板
+	               if(cur_hm_ID==source_hm_ID){//如果当前路由器的所在板子是原板
 	               int hmOut_router=(_dim_size[0]-1)*_dim_size[1]+source_router_loc[0];
 			   if(hmOut_router=cur_router){
-				out_port=gC+3;//走列出板路由器的正向端口
+				out_port=gC+2;//走列出板路由器的正向端口
 			   }else{
 				out_port=hammingmesh_xy_port(cur_router,hmOut_router);
 			   }       
-		       }else if(cur_hm_ID==dest_hm_ID){//如果当前路由器的所在板子是目标板
+		       }else if(cur_hm_ID==dest_hm_ID){//如果当前路由器的所在板子是目标板/中间板
 			int hmIn_router=   intm_hm_ID*_hm_num_routers;
-			    if(hmIn_router == dest_router){
+			    if(dest_router == hmIn_router){
 				    //At the last hop
 				    out_port= dest % gC;
 			    }else{
 				 out_port=hammingmesh_xy_port(hmIn_router,dest_router);   
 			    }       
 		       }
-		  }else{//对于行列交换机来说,通过查表找端口
-	          out_port=Search_OutPort_SOC(intm);
+		  }else{//对于列交换机来说,通过查表找端口
+	          out_port=Search_OutPort_SOC(cur_router, intm_hm_ID*_hm_num_routers);
                   }
 	  }
-  }
-  else {//如果跨越了两个个交换机(三个板子)
-    if (grp_ID > dest_hm_ID) {
-      //将目的路由器的组id赋值给输出组变量
-      hm_output = dest_hm_ID;
-    } else {
-      //2、若当前路由器所在的组id小于目的路由器的组id，0->4
-      //将目的路由器的组id-1再赋值给输出组变量
-      hm_output = dest_hm_ID - 1;//hm_output=2-1=1
-    } 
-    //统一计算需要发往当前组内的路由器id
-    hm_RID = int(hm_output /gP) + hm_ID * _hm_num_routers;//
+  }else {//如果跨越了两个交换机(三个板子)
+              if(cur_router < num_routers){//对于路由器来说
+	               if(cur_hm_ID == source_hm_ID){//如果当前路由器的所在板子是原板
+	               int hmOut_router=(source_router_loc[1]+1)*_dim_size[1]-1;
+			   if(hmOut_router=cur_router){
+				out_port=  gC+0;//走行出板路由器的正向端口
+			   }else{
+				out_port=hammingmesh_xy_port(cur_router,hmOut_router);
+			   }       
+		       }else if(cur_hm_ID==intm_hm_ID){//如果当前路由器的所在板子是中间板
+			int hmIn_router=   intm_hm_ID*_hm_num_routers;
+			    if(dest_router == hmIn_router){
+				    //走列交换机，左上角的路由器是gC+3号端口连接的列交换机
+				    out_port=gC+3;
+			    }else{
+				 out_port=hammingmesh_xy_port(hmIn_router,dest_router);   
+			    }
+		       }else{//如果当前路由器的所在板子是目的板
+			int hmIn_router=   intm_hm_ID*_hm_num_routers;
+			    if(dest_router == hmIn_router){
+				    //At the last hop
+				    out_port= dest % gC;
+			    }else{
+				 out_port=hammingmesh_xy_port(hmIn_router,dest_router);   
+			    }              
+		       }
+	      }else if(num_router < cur_router < num_router+_x ){//对于行交换机来说,通过查表找端口
+	              out_port=Search_OutPort_SOC(cur_router, intm_hm_ID*_hm_num_routers);
+              }else{//对于列交换机来说,通过查表找端口
+	              out_port=Search_OutPort_SOC(cur_router, dest_hm_ID*_hm_num_routers);
+	      }
+    
+    }
+    
   }
 
   
