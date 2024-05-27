@@ -151,7 +151,7 @@ void route_hammingmesh( const Router *r, const Flit *f, int in_channel,
 	std::vector<int> mid_hm_loc;
         mid_hm_loc = midBoard(cur_loc,dest_loc);
 	intm_hm_ID = mid_hm_loc[1]*_dim_size[3]+mid_loc[0]-1;
-	//随机选择中间板上的对角位置的路由器终端
+	//选择中间板上的左上角位置的路由器终端
 	f->intm = (intm_hm_ID*_dim_size[0]*_dim_size[1])*1;
 	if (debug){
 	cout<<"Intermediate node "<<f->intm<<" hm_id "<<intm_hm_ID<<endl;
@@ -168,7 +168,7 @@ void route_hammingmesh( const Router *r, const Flit *f, int in_channel,
       if(dest_hm_ID == intm_hm_ID){//说明目标板和源板在同一行或者同一列
 	f->ph = 1;
       } else {//否则说明目标板和源板在不同行和不同列
-	f->ph=0;
+	f->ph = 0;
       }
     }
 
@@ -380,9 +380,7 @@ int hammingmesh_hopcnt(int src, int dest)
       hopcnt = 1;
     
   } else {
-    //source and dest are in the same group
-    //find the number of hops in the source group
-    //find the number of hops in the dest group
+   
     if (src_hm_ID > dest_hm_ID)  {
       hm_output = dest_hm_ID;
       dest_hm_output = src_hm_ID - 1;
@@ -431,8 +429,8 @@ void KNCube::_BuildNet( const Configuration &config )
   int right_output;
   int left_output;
 
-  vector<int> s_input;
-  vector<int> s_output;
+  std::vector<int> s_input(3,0);
+  std::vector<int> s_output(3,0);
   //创建了一个ostringstream对象，它是一个能将输出流定向到一个字符串的类
   ostringstream router_name;
 
@@ -576,6 +574,7 @@ void KNCube::_BuildNet( const Configuration &config )
 
 int HammingMesh::find_LeftChannel( int node, int other_node, int dim )
 {
+  std::vector<int> my_channels(2,0);
   if(other_node==0){
   // The base channel for a node is 2*_n*node
   int base = 2*2*node;
@@ -624,7 +623,7 @@ int HammingMesh::find_RightChannel( int node, int other_node, int dim )
 int HammingMesh::_LeftNode( int node, int dim )
 {
   std::vector<int> location(4,0);
-  __IdToLocation(node,location);//比如node=4，现在location=[0,0,1,0] 
+  _IdToLocation(node,location);//比如node=4，现在location=[0,0,1,0] 
   std::vector<int> my_switches(2,0);
   int base = 2*2*node; 
   int off=0;
