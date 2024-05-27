@@ -51,13 +51,13 @@ void HammingMesh::_ComputeSize( const Configuration &config )
   switch_fid = _dim_size[0] * _dim_size[1] * _dim_size[2] * _dim_size[3];
   
   //行交换机起始通道号
-  switch_x_fchannel=2*2*_num_routers;
+  switch_x_fchannel = 2*2*_num_routers;
 
   //列交换机的起始通道号
-  switch_y_fchannel=switch_x_fchannel+(2*_a*_y)*_x;
+  switch_y_fchannel = switch_x_fchannel+(2*_a*_y)*_x;
   
   //给switch_ids集合赋值，例如switch_ids=[16,17,18,19]
-  for (int i = 0; i < num_switches; ++i) {
+  for (int i = 0; i < _num_switches; ++i) {
     switch_ids.push_back(switch_fid + i);
   }
 	
@@ -65,10 +65,11 @@ void HammingMesh::_ComputeSize( const Configuration &config )
   for (int i = 0; i < num_switches; ++i) {
     switch_port[switch_ids[i]] = -1;
   }	
+  
   //创建一个集合，用于存储交换机映射后的位置
-  vector<int> s_loc(4,0);
+  std::vector<int> s_loc(4,0);
   for (int i = 0; i < num_switches; ++i) {
-    __IdToLocation(switch_ids[i],s_loc)
+    _IdToLocation(switch_ids[i],s_loc)
     switch_loc.push_back(s_loc);
   }
 
@@ -79,6 +80,7 @@ void HammingMesh::_ComputeSize( const Configuration &config )
 
   //整个拓扑通道的数量,路由器的通道数加上行列交换机的通道数
   _channels = 2*2*_num_routers+(2*_a*_y)*_x+(2*_b*_x)*_y;
+  
   //整个拓扑中节点的数量
   _size= _num_routers+_num_switches;
 
@@ -90,8 +92,7 @@ void HammingMesh::RegisterRoutingFunctions() {
       gRoutingFunctionMap["route_hammingmesh"]=&route_hammingmesh;
 }
 
-//Basic adaptive routign algorithm for the hammingmesh
-//hammingmesh网路的基本自适应路由算法
+//hammingmesh网路的路由算法
 void route_hammingmesh( const Router *r, const Flit *f, int in_channel, 
 			OutputSet *outputs, bool inject )
 {
@@ -107,17 +108,13 @@ void route_hammingmesh( const Router *r, const Flit *f, int in_channel,
     return;
   }
   
-  //this constant biases the adaptive decision toward minimum routing
-  //negative value woudl biases it towards nonminimum routing
-  //下面这个参数会影响自适应路由算法的决策过程，使其倾向于选择最短路径进行数据包的路由，最短路径
-  //通常指的是经过最少数量跳点的路径，如果这个值是负值，那么路由算法的决策过程
-  int adaptive_threshold = 30;
+  
   //计算每个hm板内路由器的数量
-  int _hm_num_routers= _a*_b;
+  int _hm_num_routers = _a*_b;
   //计算每个组内终端的数量
-  int _hm_num_nodes =_hm_num_routers*1;//每个路由器连接的终端数为1
+  int _hm_num_nodes = _hm_num_routers*1;//每个路由器连接的终端数为1
   //整个网络拓扑的终端数
-  int _network_size =  _hm_num_nodes*_x*_y;//整个网络拓扑的终端数
+  int _network_size = _hm_num_nodes*_x*_y;//整个网络拓扑的终端数
 
   //获取目的终端
   int dest  = f->dest;
@@ -126,7 +123,7 @@ void route_hammingmesh( const Router *r, const Flit *f, int in_channel,
   //计算当前路由器的hm板id
   int hm_ID = (int) (rID / _grp_hm_routers);
   //计算目的路由器的hm板id
-  int dest_hm_ID = int(dest/ _grp_hm_nodes);
+  int dest_hm_ID = (int) (dest/ _grp_hm_nodes);
   //计算当前路由器在拓扑中的位置信息
   std::vector<int> cur_loc;
   _IdToLocation(rID,cur_loc);
@@ -137,31 +134,23 @@ void route_hammingmesh( const Router *r, const Flit *f, int in_channel,
   int debug = f->watch;
   int out_port = -1;
   int out_vc = 0;
-  int min_queue_size;//设置最短路径队列的size
-  int nonmin_queue_size;//设置非最短路径队列的size
-  int cur_edge_router;
-  int intm_edge_router;
-  int dest_edge_router;
+  int min_queue_size; //设置最短路径队列的size
+  int nonmin_queue_size; //设置非最短路径队列的size
   int intm_hm_ID;//中间hm板id
   int intm_rID;//中间路由器id
   //查看路由器有没有损坏
   if(debug){
     cout<<"At router "<<rID<<endl;
   }
-  //设置了两种路由方式的输出端口，一种是最短的，还有一种是非最短的
-  int min_router_output, nonmin_router_output;
-  
-  //at the source router, make the adaptive routing decision
-  //在源路由器进行自适应路由决策
-  if ( in_channel < gP )   {
+
     
     //目的节点和源节点在同一个hm板，使用xy路由
     if (dest_hm_ID == hm_ID) {
       f->ph = 2;//算当前在哪个路由阶段（ph），然后判断用哪个虚拟通道 
     } else {//选择一个中间板,intm记录中间板的hm板号
 	std::vector<int> mid_hm_loc;
-        mid_hm_loc=midBoard(cur_loc,dest_loc);
-	intm_hm_ID=mid_hm_loc[1]*_dim_size[3]+mid_loc[0]-1;
+        mid_hm_loc = midBoard(cur_loc,dest_loc);
+	intm_hm_ID = mid_hm_loc[1]*_dim_size[3]+mid_loc[0]-1;
 	//随机选择中间板上的对角位置的路由器终端
 	f->intm = (intm_hm_ID*_dim_size[0]*_dim_size[1])*1;
 	if (debug){
@@ -182,7 +171,6 @@ void route_hammingmesh( const Router *r, const Flit *f, int in_channel,
 	f->ph=0;
       }
     }
-  }
 
   //port assignement based on the phase,基于不同的阶段分配端口
   if(f->ph == 0){
@@ -464,7 +452,7 @@ void KNCube::_BuildNet( const Configuration &config )
   for ( int node = 0; node < _num_routers+_num_switches; ++node ) {
     //将字符串"router"插入到router_name对象中
     router_name << "router";
-    __IdToLocation(node,my_location);
+    _IdToLocation(node,my_location);
     router_name << my_location[0] <<my_location[1]<<my_location[2]<<my_location[3];
     
     if(node<_num_routers){
