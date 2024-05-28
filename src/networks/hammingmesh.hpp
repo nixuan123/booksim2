@@ -28,7 +28,11 @@ class HammingMesh : public Network {
   //用于找寻路由器相邻节点
   int find_LeftNode( int node, int other_node, int dim );
   int find_RightNode( int node, int other_node, int dim );
-
+  
+  //用于找寻路由器相连的通道
+  int find_LeftChannel( int node, int other_node, int dim );
+  int find_RighttChannel( int node, int other_node, int dim );
+  
   //获取路由器在拓扑中的位置
   void _IdToLocation( int run_id, int *location);
   //获取路由器的行列交换机信息
