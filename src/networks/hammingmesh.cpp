@@ -62,14 +62,14 @@ void HammingMesh::_ComputeSize( const Configuration &config )
   }
 	
   //将switch_port初始化
-  for (int i = 0; i < num_switches; ++i) {
+  for (int i = 0; i < _num_switches; ++i) {
     switch_port[switch_ids[i]] = -1;
   }	
   
   //创建一个集合，用于存储交换机映射后的位置
   std::vector<int> s_loc(4,0);
   for (int i = 0; i < num_switches; ++i) {
-    _IdToLocation(switch_ids[i],s_loc)
+    _IdToLocation(switch_ids[i],s_loc);
     switch_loc.push_back(s_loc);
   }
 
@@ -417,7 +417,7 @@ int hammingmesh_hopcnt(int src, int dest)
 
 
 
-void KNCube::_BuildNet( const Configuration &config )
+void HammingMesh::_BuildNet( const Configuration &config )
 {
   int* my_location
   int left_node;
@@ -647,7 +647,7 @@ int HammingMesh::_LeftNode( int node, int dim )
   }
   if(dim==1){
 	if(location[1]<_dim_size[0]-1){
-	    left_node=node+_dim_size[1]	  
+	    left_node=node+_dim_size[1]	;  
 	}else{  //说明在1维度的左节点是（列）交换机
 		//返回列交换机的id
 		my_switches=_EdgeRouterGetSwitchIds(node);
@@ -761,7 +761,7 @@ return right_node;
 //查表switch_to_routers，返回当前路由器的行或者列交换机(至少有1个)
 std::vector<int> HammingMesh::Search_STR(int rID){
 	std::vector<int> my_switches(2,0);
-	int flag=0；
+	int flag=0;
 	for (auto pair:switch_to_routers){
 	    for (auto num:pair.second){
 		if(num==rID){
@@ -812,18 +812,20 @@ std::vector<int> HammingMesh::Search_SOC(int rID){
 
 
 //查找switch_output_channels,返回当前行/列交换机连接特定路由器的输出端口
-int Hammingmesh::Search_OutPort_SOC(int sID){
-         int out_port;
+int Hammingmesh::Search_OutPort_SOC(int cur_router, int sID){
+     int out_port;
 	 bool found =false;
 	 for (auto pair:switch_input_channels){
-	    for (auto v:pair.second){
-		    if(v[0]==sID){
-		      out_port=v[3];
-		      found=true;
-		      break;
-		}
-		if (found) break;
-	    }
+		 if(pair.first == sID){
+	                for (auto v:pair.second){
+		           if(v[0] == cur_router){
+		              out_port=v[2];
+		              found=true;
+		              break;
+		           }
+		           if (found) break;
+	                }
+		 }
 	}
 	return out_port;
 	
@@ -831,7 +833,7 @@ int Hammingmesh::Search_OutPort_SOC(int sID){
 
 
 //返回路由器或者交换机在拓扑中的位置
-void HammingMesh::__IdToLocation(int run_id, std::vector<int>& location) {
+void HammingMesh::_IdToLocation(int run_id, std::vector<int>& location) {
     int hm_id = 0;
     int inner_id = 0;
     int num = 0;
