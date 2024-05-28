@@ -1,5 +1,5 @@
-#ifndef _KNCUBE_HPP_
-#define _KNCUBE_HPP_
+#ifndef _HAMMINGMESH_HPP_
+#define _HAMMINGMESH_HPP_
 
 #include "network.hpp"
 
@@ -35,7 +35,7 @@ class HammingMesh : public Network {
   std::vector<int> _EdgeRouterGetSwitchIds(int rtr_id);
 
   //查表switch_to_routers，返回当前路由器的行或者列交换机(至少有1个)
-  std::vector<int> HammingMesh::Search_STR(int rID);
+  std::vector<int> Search_STR(int rID);
   
   //查找switch_input_channels表格
   std::vector<int> Search_SIC(int node);
@@ -44,7 +44,7 @@ class HammingMesh : public Network {
   std::vector<int> Search_SOC(int node);
 
   //查找switch_output_channels表格中交换机
-  int Hammingmesh::Search_OutPort_SOC(int sID)
+  int Search_OutPort_SOC(int sID);
   
   //hammingmesh中的端口选择函数
   int hammingmesh_xy_port(int cur_router, int dest_router);
@@ -52,10 +52,10 @@ class HammingMesh : public Network {
   int hammingmesh_hopcnt(int src, int dest);
   bool isEdgeRouter(int rID);
   std::vector<int> midBoard(vector<int> cur_loc,vector<int> dest_loc );
-  std::vector<int> HammingMesh::_EdgeRouterGetSwitchIds(int rtr_id);
+  
 public:
   //公共方法，这些方法可以被类的实例或其他类使用
-  HammingMesh( const Configuration &config, const string & name, bool mesh );
+  HammingMesh( const Configuration &config, const string & name );
   static void RegisterRoutingFunctions();
 
   int GetN( ) const;
